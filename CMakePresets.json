@@ -1,0 +1,88 @@
+{
+  "version": 10,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 31,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "windows-msvc",
+      "displayName": "Windows MSVC",
+      "generator": "Ninja Multi-Config",
+      "binaryDir": "${sourceDir}/.build/msvc-ninja",
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_CXX_STANDARD_REQUIRED": "ON",
+        "CMAKE_CXX_EXTENSIONS": "OFF",
+        "CMAKE_CXX_SCAN_FOR_MODULES": "OFF",
+        "AENGINE_BUILD_TESTS": "ON",
+        "AENGINE_BUILD_RUNTIME": "OFF",
+        "AENGINE_WARNINGS_AS_ERRORS": "ON"
+      }
+    },
+    {
+      "name": "windows-runtime",
+      "displayName": "Windows MSVC + MVP1 Runtime",
+      "generator": "Ninja Multi-Config",
+      "binaryDir": "${sourceDir}/.build/msvc-runtime",
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_CXX_STANDARD_REQUIRED": "ON",
+        "CMAKE_CXX_EXTENSIONS": "OFF",
+        "CMAKE_CXX_SCAN_FOR_MODULES": "OFF",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/.cache/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "VCPKG_INSTALLED_DIR": "${sourceDir}/.build/vcpkg_installed",
+        "AENGINE_BUILD_TESTS": "ON",
+        "AENGINE_BUILD_RUNTIME": "ON",
+        "AENGINE_WARNINGS_AS_ERRORS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "windows-debug",
+      "configurePreset": "windows-msvc",
+      "configuration": "Debug"
+    },
+    {
+      "name": "windows-relwithdebinfo",
+      "configurePreset": "windows-msvc",
+      "configuration": "RelWithDebInfo"
+    },
+    {
+      "name": "windows-release",
+      "configurePreset": "windows-msvc",
+      "configuration": "Release"
+    },
+    {
+      "name": "runtime-debug",
+      "configurePreset": "windows-runtime",
+      "configuration": "Debug"
+    },
+    {
+      "name": "runtime-relwithdebinfo",
+      "configurePreset": "windows-runtime",
+      "configuration": "RelWithDebInfo"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "windows-debug",
+      "configurePreset": "windows-msvc",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "runtime-debug",
+      "configurePreset": "windows-runtime",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

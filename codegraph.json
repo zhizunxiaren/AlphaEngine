@@ -1,0 +1,8 @@
+{
+  "exclude": [
+    ".codex/",
+    ".tmp/",
+    ".ua/",
+    ".understand-anything/"
+  ]
+}

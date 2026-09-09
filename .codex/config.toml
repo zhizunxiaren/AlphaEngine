@@ -1,0 +1,16 @@
+# Project-scoped Codex configuration. Trusted projects only.
+
+[mcp_servers.codegraph]
+command = "I:/Alpha/AEngine/.codex/tools/codegraph/node_modules/@colbymchenry/codegraph-win32-x64/node.exe"
+args = ["--liftoff-only", "--disable-warning=ExperimentalWarning", "I:/Alpha/AEngine/.codex/tools/codegraph/node_modules/@colbymchenry/codegraph-win32-x64/lib/dist/bin/codegraph.js", "serve", "--mcp", "--path", "I:/Alpha/AEngine"]
+cwd = "I:/Alpha/AEngine"
+enabled = true
+required = false
+startup_timeout_sec = 30
+tool_timeout_sec = 120
+default_tools_approval_mode = "auto"
+
+[mcp_servers.codegraph.env]
+DO_NOT_TRACK = "1"
+CODEGRAPH_NO_UPDATE_CHECK = "1"
+CODEGRAPH_NO_DOWNLOAD = "1"

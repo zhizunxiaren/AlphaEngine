@@ -1,0 +1,3 @@
+[submodule "beautiful-mermaid"]
+	path = .codex/third_party/beautiful-mermaid
+	url = https://github.com/lukilabs/beautiful-mermaid.git

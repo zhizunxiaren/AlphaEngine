@@ -1,0 +1,12 @@
+{
+  "name": "aengine-codegraph-local",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Project-local CodeGraph runtime for AEngine.",
+  "dependencies": {
+    "@colbymchenry/codegraph": "1.5.0"
+  },
+  "overrides": {
+    "picomatch": "4.0.4"
+  }
+}

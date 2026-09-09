@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "reference_glb_sha256": "E8CD1B3F0BB93652BF6C12F08427A7D77BF7FCBDC3D935DA36EA10BD6D245928",
+  "reference_content_sha256": "FC96BDB37D42BE908C9A9238518C5DAAA70BD88D08AED9D3E1AA09DA0C3B7635",
+  "camera_path_sha256": "CDE2C7378EA49CF616804E58F1886E4D05AA4230AE60F6343332DF86D3AB9080",
+  "golden_sha256": "C7B497AC2CF251D824530DE64702CB7FD699D71BC28D01D1E9EDDE7E9FAFBF05",
+  "width": 1920,
+  "height": 1080,
+  "render_objects": 200,
+  "expected_background_rgba8": [15, 33, 59, 255],
+  "masked_region": null,
+  "comparison_space": "linearized-sdr",
+  "pixel_99_9_absolute_error": 0.011764705882352941,
+  "maximum_absolute_error": 0.03137254901960784,
+  "accepted_run": "runs/20260820T062543Z-840c35256c26",
+  "reason": "Accepted MVP1 full-frame golden for the fixed OPAQUE/MASK PBR reference scene, row-major shader ABI v2 and ACES fitted tone map."
+}
