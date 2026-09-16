@@ -10,7 +10,7 @@ parent: "[[00-Home]]"
 related:
   - "[[10-Outcomes/10-AlphaEngine]]"
   - "[[90-System/LLM-Wiki-Obsidian]]"
-updated: 2026-09-10
+updated: 2026-09-15
 tags:
   - moc
   - reference
@@ -31,8 +31,15 @@ tags:
 
 ## 概念
 
-> [!note] 空状态
-> 首个里程碑方向确认后，可复用技术问题域在此新建 `concept` 笔记（如资源绑定、Barrier、Render Graph 等）并登记。
+- [[20-Knowledge/Concepts/C++-语言特性实践|C++ 语言特性实践]] —— C++ 语言层小知识点聚合页（`constexpr` 家族与编译期求值、`noexcept` 与异常契约、翻译单元与链接性）。**同类知识点在本页追加章节，不新建文档。**
+- [[20-Knowledge/Concepts/射线与几何体求交|射线与几何体求交]] —— 渲染数学聚合页（球体求交的推导、两根含义与范围筛选、法线朝向）。**同类数学知识点在本页追加章节。**
+
+> [!note] 后续登记
+> 形成独立、可复用的技术问题域时（资源绑定、GPU Barrier、Render Graph 等）才新建 `concept` 笔记并登记于此。
+
+## 工具与约定
+
+- [[20-Knowledge/Tooling/第三方依赖引入|第三方依赖引入约定]] —— 依赖引入三步流程、`third_party` 目录与修改约定、单头文件库接入方式、风险登记。
 
 ## 上游与下游
 

@@ -10,7 +10,7 @@ parent: "[[00-Home]]"
 related:
   - "[[20-Knowledge/00-Knowledge-MOC]]"
   - "[[90-System/LLM-Wiki-Obsidian]]"
-updated: 2026-09-10
+updated: 2026-09-15
 tags:
   - moc
   - sources
@@ -26,6 +26,14 @@ tags:
 
 - [[30-Sources/Karpathy-LLM-Wiki|Karpathy LLM Wiki]]（本项目文档模式的原始方法来源）
 - [[90-System/LLM-Wiki-Obsidian|本项目的融合工作模式]]
+
+## 语言与工具链
+
+- [[30-Sources/C++-标准与cppreference|C++ 标准与 cppreference]]（语言规范与 Core Guidelines，支撑 [[20-Knowledge/Concepts/C++-语言特性实践|C++ 语言特性实践]]）
+
+## 第三方库与资产
+
+- [[30-Sources/stb-图像解码库|stb_image 图像解码库]]（单头文件图像解码库 v2.30；引入约定见 [[20-Knowledge/Tooling/第三方依赖引入]]）
 
 ## 图形与渲染技术（待采集）
 

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  AlphaEngine 根级 MSBuild 共享属性。
+
+  位置：仓库根目录。MSBuild 会从项目目录逐级向上查找本文件并自动导入，
+        因此 Engine/Engine.vcxproj 不需要显式 <Import>。
+
+  导入时机：本文件由 Microsoft.Common.props 导入，早于 C++ 各组件的
+            默认值生效，所以这里设置的 OutDir / IntDir 不会被默认值覆盖。
+
+  当前职责：把构建产物从源码树中移出，统一落到仓库根的 build/ 下，
+            使源码目录只保留源码。
+
+  后续可在本文件集中语言标准、警告级别等公共编译设置，避免在多个
+  工程与配置中重复四遍。
+-->
+<Project>
+
+  <PropertyGroup>
+    <!-- $(MSBuildThisFileDirectory) 指向本文件所在目录，包含结尾反斜杠 -->
+    <BuildRoot>$(MSBuildThisFileDirectory)build\</BuildRoot>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <OutDir>$(BuildRoot)bin\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(BuildRoot)obj\$(MSBuildProjectName)\$(Platform)\$(Configuration)\</IntDir>
+  </PropertyGroup>
+
+</Project>
