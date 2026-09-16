@@ -1,36 +1,88 @@
-# ── 构建产物（预留，待 fromzero 技术栈确认后按实际工具链启用） ──
-# Cargo / Rust
-debug
-target
-**/*.rs.bk
+# ─────────────────────────────────────────────────────────────
+# AlphaEngine — 版本控制忽略规则
+#
+# 原则：仓库只保留源码与文档。构建产物、运行产物、工具本地数据
+#       以及任何凭据一律不进入版本控制。
+# 说明：目录规则（build/、.vs/ 等）在任意层级生效，无需加前缀；
+#       文件规则（*.pdb 等）同样递归匹配。
+# ─────────────────────────────────────────────────────────────
+
+# ── 构建产物根目录（由根级 Directory.Build.props 统一重定向到这里）──
+build/
+
+# 防御性规则：若某次构建未走 build/，也不让产物进入版本控制
+# 注意：Visual Studio 的 32 位平台目录名是 Win32，不是 x86
+x64/
+Win32/
+x86/
+[Bb]in/
+[Oo]bj/
+
+# ── MSBuild / VC++ 输出与中间文件 ──
+*.exe
+*.dll
+*.lib
+*.exp
+*.obj
 *.pdb
+*.ilk
+*.idb
+*.iobj
+*.ipdb
+*.tlog
+*.recipe
+*.lastbuildstate
+*.res
+*.aps
+*.log
 
-# cargo mutants
-**/mutants.out*/
+# ── 其他工具链中间产物（Clang / GCC 预留）──
+*.o
+*.a
+*.so
+*.so.*
+*.dylib
+*.pch
+*.gch
+*.ipch
 
-# Visual Studio (来自 fromzero 临时 VS 骨架)
+# ── Visual Studio 本地状态 ──
 .vs/
-**/.vs/
+*.user
+*.suo
 *.VC.db
-*.VC.VC.opendb
+*.VC.opendb
 *.VC.db-shm
 *.VC.db-wal
-*.suo
-*.user
 
-# CMake
-build/
-cmake-build-*/
+# ── 运行产物 ──
+output/
+Engine/*.ppm
 
-# 构建/运行产物
-bin/
-out/
-x64/
-x86/
-
-# 综合
-*.log
-.DS_Store
-
-# RustRover / JetBrains
+# ── 工具本地数据与编辑器状态 ──
+.workbuddy/
+.vscode/
 .idea/
+.clangd/
+compile_commands.json
+
+# ── 凭据与本地环境（禁止入库）──
+.env
+.env.*
+*.key
+*.pem
+*.pfx
+*.p12
+secrets/
+
+# ── 操作系统杂项 ──
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─────────────────────────────────────────────────────────────
+# 例外：第三方依赖需入库做版本锁定与哈希校验
+#       （见 docs/20-Knowledge/Tooling/第三方依赖引入.md）
+#       规则必须置于上述忽略规则之后才能生效
+# ─────────────────────────────────────────────────────────────
+!Engine/third_party/**
