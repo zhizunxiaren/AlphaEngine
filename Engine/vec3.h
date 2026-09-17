@@ -63,11 +63,17 @@ class vec3 {
     }
 
     // 归一化前判断退化向量，避免除零产生 NaN 
-    constexpr bool near_zero() const noexcept {
+    bool near_zero() const noexcept {
         constexpr double s = 1e-8;
-        return (e[0] <s ) && (e[0] > -s)
-        && (e[1] <s ) && (e[1] > -s)
-        && (e[2] <s ) && (e[2] > -s);
+        return (std::fabs(e[0]) < s ) && (std::fabs(e[1]) < s ) && (std::fabs(e[2]) < s );
+    }
+
+    static vec3 random(){
+        return vec3(random_double(), random_double(), random_double());
+    }
+
+    static vec3 random(double min, double max){
+        return vec3(random_double(min, max), random_double(min, max), random_double(min, max));
     }
 
 };
@@ -124,6 +130,30 @@ constexpr vec3 cross(const vec3& u, const vec3& v) noexcept {
 inline vec3 unit_vector(const vec3& v) {
     assert(!v.near_zero());
     return v / v.length();
+}
+
+inline vec3 random_unit_vector(){
+    while(true){
+        auto p = vec3::random(-1, 1);
+        auto lensq = p.length_squared();
+        if(1e-160 < lensq && lensq < 1) {
+            return (p / sqrt(lensq));
+        }
+    }
+}
+
+inline vec3 random_on_hemisphere(const vec3& normal){
+    vec3 on_unit_sphere = random_unit_vector();
+    if(dot(normal, on_unit_sphere) > 0)
+    {
+        return on_unit_sphere;
+    }
+    return -on_unit_sphere;
+}
+
+inline vec3 reflection(const vec3& v , const vec3& n){
+    // n is unit vector
+    return v - 2* dot(v,n) * n;
 }
 
 constexpr bool operator==(const vec3& u, const vec3&v) noexcept{

@@ -10,7 +10,7 @@ parent: "[[00-Home]]"
 related:
   - "[[10-Outcomes/10-AlphaEngine]]"
   - "[[90-System/LLM-Wiki-Obsidian]]"
-updated: 2026-09-15
+updated: 2026-09-17
 tags:
   - moc
   - reference
@@ -33,9 +33,11 @@ tags:
 
 - [[20-Knowledge/Concepts/C++-语言特性实践|C++ 语言特性实践]] —— C++ 语言层小知识点聚合页（`constexpr` 家族与编译期求值、`noexcept` 与异常契约、翻译单元与链接性）。**同类知识点在本页追加章节，不新建文档。**
 - [[20-Knowledge/Concepts/射线与几何体求交|射线与几何体求交]] —— 渲染数学聚合页（球体求交的推导、两根含义与范围筛选、法线朝向）。**同类数学知识点在本页追加章节。**
+- [[20-Knowledge/Concepts/路径追踪与蒙特卡洛积分|路径追踪与蒙特卡洛积分]] —— 光传输与采样聚合页（反向追踪与光路可逆、蒙特卡洛估计与余弦加权、递归形态、噪声与陷阱）。**同类主题在本页追加章节。**
+- [[20-Knowledge/Concepts/光照模型|光照模型]] —— 着色与光照聚合页（BRDF / 光照模型 / 着色频率三层分离与三者完整式对照、辐射度量符号约定与朗伯余弦定律、`1/π` 的两种工程约定、Phong 与 Blinn-Phong 的向量推导、方向光 / 点光源 / 聚光灯的衰减模型、Flat / Gouraud / Phong shading 对比、Cook-Torrance 的 `D`/`F`/`G` 具体形式与粗糙度换算）。**同类着色知识点在本页追加章节。**
 
 > [!note] 后续登记
-> 形成独立、可复用的技术问题域时（资源绑定、GPU Barrier、Render Graph 等）才新建 `concept` 笔记并登记于此。
+> 形成独立、可复用的技术问题域时（资源绑定、GPU Barrier、Render Graph、颜色空间、采样与积分等）才新建 `concept` 笔记并登记于此。
 
 ## 工具与约定
 
