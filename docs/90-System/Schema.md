@@ -12,7 +12,7 @@ related:
   - "[[90-System/LLM-Wiki-Obsidian]]"
   - "[[20-Knowledge/00-Knowledge-MOC]]"
   - "[[30-Sources/00-Sources-MOC]]"
-updated: 2026-09-10
+updated: 2026-09-19
 tags:
   - obsidian
   - documentation
@@ -102,5 +102,5 @@ tags:
 ## 7. 隐私与安全
 
 - 密钥、密码、访问令牌和个人敏感信息不进入 Vault。
-- .env、凭据和个人 Dear ImGui/Obsidian 布局保存在受控且忽略的位置。
+- .env、凭据和个人 IDE/Obsidian 布局保存在受控且忽略的位置。
 - 第三方资料进入来源层前记录来源与许可；第三方依赖在实施前完成版本锁定和安全检查。

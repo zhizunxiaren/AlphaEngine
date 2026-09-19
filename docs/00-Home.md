@@ -6,7 +6,7 @@ aliases:
 type: moc
 status: active
 area: project
-updated: 2026-09-10
+updated: 2026-09-19
 tags:
   - moc
   - rendering
@@ -16,7 +16,7 @@ tags:
 # AlphaEngine
 
 > [!abstract] 项目目标
-> 实现一个现代高性能实时渲染器。当前 `fromzero` 分支为**空基线重启**：本文档确立了 LLM Wiki × Obsidian 知识库框架，引擎目标、技术栈与版本边界待成果层确认后填充。
+> 实现一个现代高性能实时渲染器。当前 `fromzero` 分支为**空基线重启**：本文档确立了 LLM Wiki × Obsidian 知识库框架；引擎目标、技术栈与版本边界仍待成果层确认，仓库中已有一个可运行的学习性过渡实现（见 [[10-Outcomes/10-AlphaEngine#实现现状（学习性过渡基线）|实现现状]]）。
 
 > [!tip] LLM Wiki × Obsidian
 > LLM Wiki 负责持续采集、综合、交叉引用和维护；Obsidian 负责 Properties、WikiLinks、Backlinks、MOC 和 Graph。它们不是两个文档系统，而是同一套知识生产与浏览方式。
@@ -40,7 +40,7 @@ flowchart LR
 
 ## 当前焦点
 
-框架初始化完成。下一步是定义 fromzero 的项目目标与首版边界：渲染技术栈（图形 API / 语言 / 构建）、首个可验证里程碑及参考基线。相关决策落位后，在 [[10-Outcomes/10-AlphaEngine|项目系统与路线]] 建立版本 owner，并把知识层与来源层页面逐步点亮。
+框架已经建立并转入持续维护：Sources → Knowledge → Outcomes 三层均有承载页，仓库中存在一个可运行的学习性过渡实现（CPU 侧光追，见 [[10-Outcomes/10-AlphaEngine]]）。**下一动作仍是固化首版基线**——渲染技术栈（图形 API / 语言标准 / 构建与依赖管理）、首个可验证里程碑及其验收合同。四项基线决策落位后，在 [[10-Outcomes/10-AlphaEngine|项目系统与路线]] 建立版本 owner note，并把「实现现状」一节移交该 owner；在此之前，过渡实现不得被当作架构决策引用。
 
 ## 导航
 
