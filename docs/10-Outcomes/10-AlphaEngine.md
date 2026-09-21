@@ -7,7 +7,7 @@ type: project
 status: working
 area: roadmap
 parent: "[[00-Home]]"
-updated: 2026-09-19
+updated: 2026-09-21
 tags:
   - rendering
   - roadmap
@@ -16,8 +16,8 @@ tags:
 
 # AlphaEngine 高性能实时渲染器路线
 
-- 状态：**已有首个可运行的过渡实现（学习性基线）；引擎目标、技术栈与首版边界待确认**
-- 更新日期：2026-09-19
+- 状态：**已有可运行的过渡实现（学习性基线，含多线程渲染）；引擎目标、技术栈与首版边界待确认**
+- 更新日期：2026-09-21
 - 文档职责：只维护项目目标、架构约束和版本边界
 
 ## 怎么读项目文档
@@ -36,16 +36,17 @@ AlphaEngine 的长期目标是**现代高性能实时渲染器**而非通用游�
 > [!warning] 本节不是技术栈决策
 > 这里只登记 `fromzero` 仓库中**已经存在的事实**，唯一目的是防止文档与代码真实状态脱节。它**不构成**底层图形 API、渲染架构、语言标准或首版里程碑的选择——那四项仍属本文档「当前决策状态」的待决项。首版基线确认后，本节的定位由对应里程碑 owner note 取代，本节随即失效。
 
-- 事实截点：2026-09-19（对应提交 `bd71c56` / `b7256ec` / `9525467`）
+- 事实截点：2026-09-21
 - 变更规则：本节内容随代码变化同步更新，并在 [[90-System/Log]] 追加记录
 
 | 维度 | 当前事实 |
 |---|---|
 | 语言与构建 | C++（MSVC 工具链）；`Engine/Engine.slnx` + `Engine/Engine.vcxproj`；输出目录 `build/`（已忽略） |
 | 依赖与来源 | [[30-Sources/stb-图像解码库\|stb_image]]，按 [[20-Knowledge/Tooling/第三方依赖引入\|第三方依赖引入]] 约定置于 `Engine/third_party/stb/`。**当前尚未启用**：仅在 `Engine.vcxproj` 中登记为项目项，没有任何翻译单元定义 `STB_IMAGE_IMPLEMENTATION`，也无调用点 |
-| 实现性质 | 跟随 *Ray Tracing in One Weekend* 的逐章实现（当前对齐 13.x），属**学习性过渡实现**，非目标架构 |
-| 已具备能力 | 可定位相机（`vfov` / `lookfrom` / `lookat` / `vup`）与景深（散焦圆盘采样）；`material` 抽象（`lambertian` / `metal` / `dielectric`，含反射、折射与 Schlick 近似）；递归路径追踪与 `max_depth` 截断；像素多重采样抗锯齿；gamma 2 编码输出 PPM |
-| 已知差距 | 场景无显式光源（天空是唯一光源）、无直接光采样、光线方向未归一化、无俄罗斯轮盘赌、无加速结构（BVH）、无实时窗口与 ImGui |
+| 实现性质 | 跟随 *Ray Tracing in One Weekend* 的逐章实现（当前对齐 13.x 终局场景），属**学习性过渡实现**，非目标架构 |
+| 已具备能力 | 可定位相机（`vfov` / `lookfrom` / `lookat` / `vup`）与景深（散焦圆盘采样）；`material` 抽象（`lambertian` / `metal` / `dielectric`，含反射、折射与 Schlick 近似，`scatter` 为纯虚接口）；递归路径追踪与 `max_depth` 截断；像素多重采样抗锯齿；gamma 2 编码输出 PPM；**多线程渲染**（按行分块、每线程独立 RNG、先写帧缓冲再顺序输出）；渲染耗时统计（`steady_clock`） |
+| 随机数架构 | 已由全局 `random_double()` 改为**显式注入的 `rng_t` 上下文**（`rtweekend.h` 定义，`mt19937` + 均匀分布），贯穿场景构建 → `get_ray` → `scatter` → 递归全链路，无隐藏全局状态 |
+| 已知差距 | 场景无显式光源（天空是唯一光源）、无直接光采样、光线方向未归一化、无俄罗斯轮盘赌、无加速结构（BVH）、无实时窗口与 ImGui；任务调度为**静态行分块**（动态调度尚未实现，`rtweekend.h` 已包含但未使用 `<atomic>`）；每线程独立种子的写法使图像噪声图案随线程数变化，不跨机器可复现 |
 | 与长期目标的关系 | 长期目标是**现代高性能实时渲染器**。当前实现位于 CPU 侧，用于建立几何、材质与光传输的正确性直觉；它既非目标架构，也尚未触及图形 API、GPU 渲染管线等实时渲染的关键部分 |
 
 相关理由与推导不在此复制：光传输与采样见 [[20-Knowledge/Concepts/路径追踪与蒙特卡洛积分]]，着色与光照见 [[20-Knowledge/Concepts/光照模型]]，求交数学见 [[20-Knowledge/Concepts/射线与几何体求交]]。

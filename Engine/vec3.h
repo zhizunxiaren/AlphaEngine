@@ -68,12 +68,14 @@ class vec3 {
         return (std::fabs(e[0]) < s ) && (std::fabs(e[1]) < s ) && (std::fabs(e[2]) < s );
     }
 
-    static vec3 random(){
-        return vec3(random_double(), random_double(), random_double());
+    static vec3 random(rng_t& rng)
+    {
+        return vec3(rng.next(), rng.next(), rng.next());
     }
 
-    static vec3 random(double min, double max){
-        return vec3(random_double(min, max), random_double(min, max), random_double(min, max));
+    static vec3 random(rng_t& rng, double min, double max)
+    {
+        return vec3(rng.next(min, max), rng.next(min, max), rng.next(min, max));
     }
 
 };
@@ -132,20 +134,20 @@ inline vec3 unit_vector(const vec3& v) {
     return v / v.length();
 }
 
-inline vec3 random_unit_vector(){
+inline vec3 random_unit_vector(rng_t& rng){
     while(true){
-        auto p = vec3::random(-1, 1);
-        auto lensq = p.length_squared();
+        auto p = vec3::random(rng, -1, 1);
+        const auto lensq = p.length_squared();
         if(1e-160 < lensq && lensq < 1) {
             return (p / sqrt(lensq));
         }
     }
 }
 
-inline vec3 random_in_unit_disk(){
+inline vec3 random_in_unit_disk(rng_t& rng){
     while (true)
     {
-        auto p = vec3(random_double(-1,1), random_double(-1, 1) , 0);
+        auto p = vec3(rng.next(-1, 1), rng.next(-1, 1), 0);
         if (p.length_squared() < 1)
         {
             return p;
@@ -153,8 +155,8 @@ inline vec3 random_in_unit_disk(){
     }
 }
 
-inline vec3 random_on_hemisphere(const vec3& normal){
-    vec3 on_unit_sphere = random_unit_vector();
+inline vec3 random_on_hemisphere(rng_t& rng, const vec3& normal){
+    vec3 on_unit_sphere = random_unit_vector(rng);
     if(dot(normal, on_unit_sphere) > 0)
     {
         return on_unit_sphere;

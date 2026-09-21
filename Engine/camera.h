@@ -1,5 +1,8 @@
 #pragma once
 
+#include <algorithm>
+#include <chrono>
+
 #include "rtweekend.h"
 #include "hittable_list.h"
 #include "material.h"
@@ -19,36 +22,79 @@ class camera{
     double defocus_angle = 0; // Variation angle of rays through each pixel
     double focus_dist = 10; // Distance from camera lookfrom point to plane of perfect focus
     
-    void render(hittable_list world){
+    void render(const hittable_list& world){
 
+        using clock_type = std::chrono::steady_clock;   // 单调时钟，不受系统时间调整影响
+        const auto t_start = clock_type::now();
+        
         initialize();
+        
+        std::vector<color> framebuffer(
+            static_cast<std::size_t>(image_width) * image_height);
+        
+        unsigned thread_count = std::min(std::max(1u, std::thread::hardware_concurrency()), static_cast<unsigned>(image_height));
 
-        std::ofstream out("image.ppm", std::ios::binary);
-        if(!out)
+        constexpr std::uint32_t BASE_SEED = 5489;
+        
+        // 行级动态调度：各行计算量差异大（打到玻璃球的像素递归更深），
+        // 动态取行比静态分块更能自动负载均衡。
+        int rows_per_thread = (image_height + static_cast<int>(thread_count) - 1)
+                            / static_cast<int>(thread_count);
+
+        auto worker = [&] (std::uint32_t seed, int row_begin, int row_end)
         {
-            std::cerr << "Failed to open file" << std::endl;
-            return;
-        }
-
-        // Render
-
-        out << "P3\n" << image_width << ' ' << image_height << "\n255\n";
-
-        for (int j = 0; j < image_height; j++) {
-            std::clog << "\rScanlines remaining: " << (image_height - j) << ' ' << std::flush;
-            for (int i = 0; i < image_width; i++) {
-                color pixel_color(0,0,0);
-                for(int k = 0; k < sample_per_pixel; k++)
+            rng_t rng(seed);
+            for (int j = row_begin; j < row_end; j++)
+            {
+                for (int i = 0 ; i < image_width; i++)
                 {
-                    ray ray_temp = get_ray(i, j );
-                    pixel_color += ray_color(ray_temp, max_depth, world);
+                    color pixel_color(0, 0, 0);
+                    for (int k = 0; k < sample_per_pixel; k++)
+                    {
+                        ray r = get_ray(i, j, rng);
+                        pixel_color += ray_color(r, max_depth, world, rng);
+                    }
+                    framebuffer[static_cast<std::size_t>(j) * image_width + i]
+                        = pixel_color * pixel_sample_scale;
                 }
-
-                write_color(out, pixel_color * pixel_sample_scale);
+            }
+        };
+        
+        std::vector<std::thread> pool;
+        pool.reserve(thread_count);
+        for (unsigned t = 0; t < thread_count; t++)
+        {
+            const int begin = static_cast<int>(t) * rows_per_thread;
+            const int end   = std::min(begin + rows_per_thread, image_height);
+            if (begin >= end) continue;   // 行已分完，不再起线程
+            pool.emplace_back(worker, mix_seed(BASE_SEED + t), begin, end);
+        }
+        for (auto& th : pool)
+        {
+            th.join();
+        }
+        
+        std::ofstream out("image.ppm", std::ios::binary);
+        if (!out)
+        {
+            std::cerr << "Failed to open file\n"; return;
+        }
+        out << "P3\n" << image_width << ' ' << image_height << "\n255\n";
+        for (int j = 0 ; j < image_height; j++)
+        {
+            for (int i = 0; i < image_width; i++)
+            {
+                write_color(out, framebuffer[static_cast<std::size_t>(j) * image_width + i]);
             }
         }
+        
+        const auto t_end = clock_type::now();
 
-        std::clog << "\rDone.                 \n";
+        const double elapsed_ms =
+            std::chrono::duration<double, std::milli>(t_end - t_start).count();
+
+        std::clog << "\nRender time: " << elapsed_ms << " ms ("
+                  << elapsed_ms / 1000.0 << " s)\n";
     }
 
     private:
@@ -102,29 +148,29 @@ class camera{
             
         }
 
-        ray get_ray(int i, int j ) const {
+        ray get_ray(int i, int j, rng_t& rng ) const {
             // Construct a camera ray originating from the defocus disk and directed at a randomly
             // sampled point around the pixel location i, j.
-            vec3 offset = sample_square();
-            point3 pixel_sampe = pixel00_loc + (i + offset.x()) * pixel_delta_u + (j + offset.y()) * pixel_delta_v;
-            point3 ray_origin = (defocus_angle <= 0) ? center : defocus_disk_sample();
-            vec3 ray_direction = pixel_sampe - ray_origin;
+            vec3 offset = sample_square(rng);
+            point3 pixel_sample = pixel00_loc + (i + offset.x()) * pixel_delta_u + (j + offset.y()) * pixel_delta_v;
+            point3 ray_origin = (defocus_angle <= 0) ? center : defocus_disk_sample(rng);
+            vec3 ray_direction = pixel_sample - ray_origin;
             return ray(ray_origin, ray_direction);
 
         }
 
-        vec3 sample_square() const {
+        vec3 sample_square(rng_t& rng) const {
             // Returns the vector to a random point in the [-.5,-.5]-[+.5,+.5] unit square.
-            return vec3(random_double() - 0.5, random_double() - 0.5, 0);
+            return vec3(rng.next() - 0.5, rng.next() - 0.5, 0);
         }
     
-        vec3 defocus_disk_sample() const{
+        vec3 defocus_disk_sample(rng_t& rng) const{
             // Returns a random point in the camera defocus disk.
-            auto p = random_in_unit_disk();
+            auto p = random_in_unit_disk(rng);
             return center + (p[0] * defocus_disk_u) + (p[1] * defocus_disk_v);
         }
 
-        color ray_color(const ray& r, int depth, const hittable& world){
+        color ray_color(const ray& r, int depth, const hittable& world, rng_t& rng) const {
             // If we've exceeded the ray bounce limit, no more light is gathered.
             if(depth <= 0)
             {
@@ -140,9 +186,9 @@ class camera{
                 //return 0.5 * ray_color(ray(rec.p, direction), depth - 1, world);
                 ray scattered;
                 color attenuation;
-                if(rec.mat->scatter(r, rec, attenuation, scattered))
+                if(rec.mat->scatter(r, rec, rng, attenuation, scattered))
                 {
-                    return attenuation  * ray_color(scattered, depth - 1, world);
+                    return attenuation  * ray_color(scattered, depth - 1, world, rng);
                 }
                 return color(0,0,0);
             }
