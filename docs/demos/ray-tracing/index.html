@@ -1,0 +1,3741 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>光线追踪 · 可视化拆解（Ray Tracing in One Weekend）</title>
+<style>
+:root{
+  --bg:#f4f5f8; --card:#ffffff; --ink:#16191f; --muted:#6b7280; --line:#e4e7ec;
+  --accent:#5450d8; --accent-soft:#eeedfd; --teal:#0e9384; --teal-soft:#e6f6f4;
+  --amber:#b45309; --amber-soft:#fdf3e3; --rose:#be123c; --rose-soft:#fdeef2;
+  --vp:#0c1017; --vp2:#141a23;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth; scroll-padding-top:20px}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font:15px/1.8 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{display:grid; grid-template-columns:216px minmax(0,1fr); gap:40px;
+  max-width:1180px; margin:0 auto; padding:32px 24px 140px;}
+@media (max-width:920px){
+  .wrap{grid-template-columns:1fr; gap:0; padding:18px 14px 90px}
+  .toc{display:none}
+}
+
+/* ---------- 侧栏 ---------- */
+.toc{position:sticky; top:24px; align-self:start; max-height:calc(100vh - 48px); overflow:auto}
+.toc h4{margin:0 0 10px; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); font-weight:700}
+.toc a{display:block; padding:6px 10px; margin:1px 0; border-radius:7px; color:#4b5563;
+  text-decoration:none; font-size:13.5px; line-height:1.5; border-left:2px solid transparent}
+.toc a:hover{background:#e9eaf0; color:var(--ink)}
+.toc a.on{background:var(--accent-soft); color:var(--accent); border-left-color:var(--accent); font-weight:600}
+
+/* ---------- 头部 ---------- */
+.hero{background:linear-gradient(140deg,#12172a 0%,#1d1b3d 55%,#2a1f45 100%);
+  border-radius:18px; padding:34px 34px 30px; color:#eef0ff; margin-bottom:30px; position:relative; overflow:hidden}
+.hero::after{content:""; position:absolute; right:-60px; top:-60px; width:280px; height:280px;
+  border-radius:50%; background:radial-gradient(circle,rgba(124,120,255,.42),transparent 68%)}
+.hero .kicker{font:600 11px/1 var(--mono); letter-spacing:.2em; text-transform:uppercase; color:#9a95ff}
+.hero h1{margin:14px 0 10px; font-size:31px; line-height:1.25; letter-spacing:-.01em}
+.hero p{margin:0; color:#b9bdd6; font-size:15px; max-width:660px}
+.hero .meta{margin-top:20px; display:flex; flex-wrap:wrap; gap:8px}
+.hero .meta span{font:500 12px/1 var(--mono); background:rgba(255,255,255,.09);
+  border:1px solid rgba(255,255,255,.13); padding:6px 11px; border-radius:999px; color:#c8cbe4}
+.hero a{color:#a5a1ff}
+
+/* ---------- 区块 ---------- */
+section{margin:0 0 26px}
+.sec-h{display:flex; align-items:center; gap:12px; margin:0 0 14px}
+.sec-h .no{flex:0 0 auto; width:30px; height:30px; border-radius:9px; background:var(--accent);
+  color:#fff; font:700 14px/30px var(--mono); text-align:center}
+.sec-h h2{margin:0; font-size:20.5px; letter-spacing:-.01em}
+.card{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:22px 24px;
+  box-shadow:0 1px 2px rgba(16,24,40,.04)}
+.card + .card{margin-top:14px}
+p{margin:10px 0}
+.muted{color:var(--muted)}
+code{font:13px/1.6 var(--mono); background:#eef0f4; padding:1.5px 6px; border-radius:5px; color:#3b3f52}
+
+/* ---------- 提示块 ---------- */
+.note{border-radius:11px; padding:14px 17px 14px 44px; margin:14px 0; position:relative; font-size:14.5px; line-height:1.75}
+.note::before{position:absolute; left:15px; top:13px; font-size:16px}
+.note b{font-weight:700}
+.note.i{background:var(--accent-soft); border-left:3px solid var(--accent)}
+.note.i::before{content:"💡"}
+.note.w{background:var(--amber-soft); border-left:3px solid var(--amber)}
+.note.w::before{content:"⚠️"}
+.note.t{background:var(--teal-soft); border-left:3px solid var(--teal)}
+.note.t::before{content:"✅"}
+.note.r{background:var(--rose-soft); border-left:3px solid var(--rose)}
+.note.r::before{content:"🚫"}
+
+/* ---------- 公式 ---------- */
+.eq{font:15px/2.1 var(--mono); background:#f0f1f6; border:1px solid #e2e4ec; border-radius:10px;
+  padding:14px 18px; margin:13px 0; overflow-x:auto; white-space:nowrap; color:#2c3040}
+.eq .hl{background:#fff3b8; border-radius:4px; padding:2px 5px; color:#7a4b00; font-weight:600}
+.eq .cm{color:#8a90a6}
+.eq .op{color:#7c3aed}
+
+/* ---------- 控件 ---------- */
+.ctl{display:flex; flex-wrap:wrap; align-items:center; gap:9px 16px;
+  background:#f7f8fb; border:1px solid var(--line); border-radius:11px; padding:12px 15px; margin:14px 0; font-size:13.5px}
+.ctl label{display:flex; align-items:center; gap:7px; color:#454b5c; font-weight:500}
+.ctl input[type=range]{width:112px; accent-color:var(--accent)}
+.ctl select{font:inherit; font-size:13px; padding:5px 9px; border:1px solid #d3d7e0;
+  border-radius:7px; background:#fff; color:var(--ink)}
+button.btn{font:inherit; font-size:13.5px; font-weight:600; padding:7px 15px; border-radius:8px;
+  border:1px solid var(--accent); background:var(--accent); color:#fff; cursor:pointer}
+button.btn:hover{filter:brightness(1.08)}
+button.btn.ghost{background:#fff; color:var(--accent)}
+button.btn.ghost:hover{background:var(--accent-soft)}
+button.btn.ghost.on{background:var(--accent); color:#fff; border-color:var(--accent)}
+.val{font:600 13px var(--mono); color:var(--accent); min-width:34px; display:inline-block}
+.pill{font:600 12px var(--mono); background:#e8eaf2; border-radius:6px; padding:3px 8px; color:#454b62}
+/* §8 方向占比图例：每段一个色块 + 次数 + 占比 */
+.spans{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px}
+.spans .sp{display:flex; align-items:center; gap:7px; background:#f5f6fa; border:1px solid #e7e9f0;
+  border-radius:8px; padding:5px 10px; font:600 12px var(--mono); color:#2c3242; cursor:pointer}
+.spans .sp i{width:11px; height:11px; border-radius:3px; display:block}
+.spans .sp em{font-style:normal; font-weight:500; color:#8b91a4}
+
+canvas{display:block; width:100%; border-radius:11px}
+.vpcanvas{background:var(--vp); border:1px solid #232b38}
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+@media (max-width:820px){.grid2{grid-template-columns:1fr}}
+.h300{height:300px} .h260{height:260px} .h360{height:360px}
+.h220{height:220px} .h420{height:420px} .h200{height:200px}
+@media (max-width:820px){.h300,.h360,.h420{height:250px}}
+
+.cap{font-size:12.5px; color:var(--muted); margin-top:8px; text-align:center}
+
+/* ---------- 读数表 ---------- */
+.read{display:grid; grid-template-columns:repeat(auto-fit,minmax(118px,1fr)); gap:8px; margin-top:12px}
+.read div{background:#f5f6fa; border:1px solid #e7e9f0; border-radius:9px; padding:8px 11px}
+/* 注意：不加 text-transform:uppercase —— 这里的标签是数学变量名（a/h/c/oc/r²），大写会改变符号含义 */
+.read .k{font:600 10.5px var(--mono); letter-spacing:.06em; color:#8b91a4}
+.read .v{font:600 14.5px var(--mono); margin-top:3px; color:#232838}
+.read .v.ok{color:var(--teal)} .read .v.no{color:var(--rose)}
+
+table{width:100%; border-collapse:collapse; margin:14px 0; font-size:14px}
+th,td{text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+th{background:#f4f5fa; font-weight:700; font-size:12.5px; letter-spacing:.03em; color:#4a5164}
+tr:last-child td{border-bottom:none}
+td.mono,th.mono{font-family:var(--mono); font-size:13px}
+.tag{display:inline-block; font:600 11px var(--mono); padding:2px 7px; border-radius:5px; background:#eceef5; color:#4a5164}
+
+.legend{display:flex; flex-wrap:wrap; gap:8px 18px; margin-top:10px; font-size:13px; color:#4b5163}
+.legend i{display:inline-block; width:11px; height:11px; border-radius:3px; margin-right:6px; vertical-align:-1px}
+
+/* ---------- §7 事件账本 ---------- */
+.ledger{display:flex; flex-direction:column; gap:7px}
+.ledger .row{display:grid; grid-template-columns:24px minmax(0,1fr); gap:10px; align-items:start;
+  background:#f5f6fa; border:1px solid #e7e9f0; border-left:3px solid #d7dae5; border-radius:9px;
+  padding:9px 12px; opacity:.30; transform:translateY(4px);
+  transition:opacity .34s ease, transform .34s ease, border-color .34s ease}
+.ledger .row.on{opacity:1; transform:none}
+.ledger .row .n{font:700 12.5px/1.65 var(--mono); color:#a3a9bb}
+.ledger .row.on .n{color:var(--accent)}
+.ledger .row .t{font-weight:600; font-size:13.5px; line-height:1.55; color:#232838}
+.ledger .row .d{font:12px/1.65 var(--mono); color:#6b7280; margin-top:3px; white-space:pre-wrap}
+.ledger .row.k-metal.on{border-left-color:#8b93a8}
+.ledger .row.k-glass.on{border-left-color:var(--teal)}
+.ledger .row.k-sky.on{border-left-color:var(--amber)}
+.ledger .row.k-trunc.on{border-left-color:var(--rose)}
+
+/* 分支表：概率 / 命中次数 / 路径。点一行可把该分支切成主线单独看。 */
+.btree{display:flex; flex-direction:column; gap:6px}
+.btree .brow{display:grid; grid-template-columns:74px 66px minmax(0,1fr); gap:10px; align-items:baseline;
+  background:#f5f6fa; border:1px solid #e7e9f0; border-left:3px solid #d7dae5; border-radius:9px;
+  padding:8px 12px; cursor:pointer; opacity:.62; transition:opacity .2s ease, background .2s ease}
+.btree .brow:hover{opacity:1; background:#fff}
+.btree .brow.main{border-left-color:var(--teal)}
+.btree .brow.sel{opacity:1; background:#fff; border-left-color:var(--accent);
+  box-shadow:0 1px 0 0 var(--accent) inset; outline:1px solid var(--accent-soft)}
+.btree .brow .pr{font:700 13px var(--mono); color:var(--accent)}
+.btree .brow .hits{font:700 13px var(--mono); color:#232838}
+.btree .brow .path{font:12px/1.7 var(--mono); color:#6b7280}
+.btree .brow .path b{color:#232838; font-weight:600}
+.btree .brow .path .ar{color:#b9bfcd}
+
+footer{margin-top:40px; padding-top:20px; border-top:1px solid var(--line); color:var(--muted); font-size:13.5px}
+footer ul{margin:8px 0; padding-left:20px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="toc">
+  <h4>目录</h4>
+  <a href="#s0">先给结论</a>
+  <a href="#s1">① 和光栅化差在哪</a>
+  <a href="#s2">② 一条光线 = O + t·D</a>
+  <a href="#s3">③ 求交：打中没有</a>
+  <a href="#s4">④ 法线 → 立体感</a>
+  <a href="#s5">⑤ 弹射的账本</a>
+  <a href="#s6">⑥ 真的跑一遍</a>
+  <a href="#s7">⑦ 穿过金属球与玻璃球</a>
+  <a href="#s8">⑧ 一条光线会被弹几次</a>
+  <a href="#s9">⑨ 五个常见误区</a>
+  <a href="#s10">⑩ 对照原书</a>
+</nav>
+
+<main>
+
+<div class="hero">
+  <div class="kicker">Ray Tracing in One Weekend</div>
+  <h1>光线追踪，到底在干什么</h1>
+  <p>一句话：<b>把眼睛当相机，倒着追光。</b>每个像素射出一条光线，然后问它——「你看到了什么？」。
+     下面每一节都有一个可以动手拖的演示，建议按顺序过一遍；最后一节是真的在跑一个路径追踪器。</p>
+  <div class="meta">
+    <span>纯 CPU · 无依赖</span>
+    <span>拖动 / 点击 均可交互</span>
+    <span>与 docs/20-Knowledge 术语对齐</span>
+  </div>
+</div>
+
+<!-- ================= §0 ================= -->
+<section id="s0">
+  <div class="sec-h"><div class="no">0</div><h2>先给结论</h2></div>
+  <div class="card">
+    <p>光栅化问的是：<b>「这个三角形覆盖了哪些像素？」</b>——以物体为起点，往屏幕推。</p>
+    <p>光线追踪问的是：<b>「这个像素看到了什么？」</b>——以像素为起点，往场景里追。</p>
+    <p>方向反过来之后，三件事变得极其自然，而在光栅化里需要大量技巧才能模拟：</p>
+    <table>
+      <tr><th style="width:34%">能力</th><th>为什么反向之后免费</th></tr>
+      <tr><td><b>阴影</b></td><td>从交点朝光源再发一条光线，中途打中东西就是阴影</td></tr>
+      <tr><td><b>镜面反射 / 折射</b></td><td>沿反射定律再发一条光线，递归下去即可</td></tr>
+      <tr><td><b>全局光照（间接光）</b></td><td>在表面随机撒一条光线，连续弹射，红墙绿墙的相互染色自动出现</td></tr>
+    </table>
+    <div class="note i"><b>代价也很清楚：</b>一个像素一条光线通常不够——要发几百上千条取平均。这就是路径追踪慢、有噪声的根本原因，也是本项目后续要处理的核心问题。</div>
+  </div>
+</section>
+
+<!-- ================= §1 ================= -->
+<section id="s1">
+  <div class="sec-h"><div class="no">1</div><h2>它和光栅化差在哪</h2></div>
+  <div class="card">
+    <p>下面两边是<b>同一个三角形、同一块屏幕、同一份输出图像</b>。唯一的差别是到达的方式：左边从几何出发投影，右边从像素出发追光。注意看最后两块小图——<b>结果完全一样</b>。</p>
+    <div class="grid2" style="margin-top:14px">
+      <div>
+        <canvas id="cv-raster" class="vpcanvas h300"></canvas>
+        <div class="cap">光栅化：几何 → 投影 → 覆盖哪些像素</div>
+      </div>
+      <div>
+        <canvas id="cv-rt" class="vpcanvas h300"></canvas>
+        <div class="cap">光线追踪：像素 → 射线 → 打到谁</div>
+      </div>
+    </div>
+    <div class="ctl">
+      <label>播放 <button class="btn ghost" id="bt-play">⏸ 暂停</button></label>
+      <label>进度 <input type="range" id="rg-prog" min="0" max="1000" value="0"><span class="val" id="lb-prog">0%</span></label>
+    </div>
+    <div class="note t"><b>左边的瓶颈</b>是「遮挡」：每个像素只能填最近的那个三角形，于是有了深度缓冲（z-buffer）。<b>右边的代价</b>是「次数」：每个像素都要独立求交，于是有了 BVH 加速结构。两者都在补自己方向的短板。</div>
+  </div>
+</section>
+
+<!-- ================= §2 ================= -->
+<section id="s2">
+  <div class="sec-h"><div class="no">2</div><h2>一条光线 = O + t·D</h2></div>
+  <div class="card">
+    <p>整个光线追踪里最基础的一行字。<b>圆点 O 是起点，箭头 D 是方向</b>，t 是一个标量参数。拖动箭头尖端改变方向，拖动滑杆改变位置——点 P 永远沿着这条直线跑。</p>
+    <div class="eq">P(t) = <span class="hl">O</span> + <span class="hl">t</span>·<span class="hl">D</span> &nbsp;&nbsp; <span class="cm">// t &lt; 0 → 相机背后，要丢掉；t &gt; 0 → 前方，才可能被看见</span></div>
+    <canvas id="cv-ray" class="vpcanvas h300" style="margin-top:14px"></canvas>
+    <div class="ctl">
+      <label>t <input type="range" id="rg-t" min="0" max="320" value="0"></label>
+      <label>方向 <input type="range" id="rg-ang" min="-70" max="80" value="-22"></label>
+      <label>长度 <input type="range" id="rg-len" min="40" max="140" value="100"></label>
+      <label style="margin-left:auto"><span class="pill" id="lb-ray">—</span></label>
+    </div>
+    <div class="note w"><b>t 不是距离。</b>只有在 <code>|D| = 1</code> 时 t 才等于欧氏距离。方向若由「像素位置 − 相机位置」直接给出，<code>a = |D|² ≠ 1</code>，t 只是参数。这直接影响 <code>t_min</code> / <code>t_max</code> 怎么取值——笔记里专门记了这条坑。</div>
+  </div>
+</section>
+
+<!-- ================= §3 ================= -->
+<section id="s3">
+  <div class="sec-h"><div class="no">3</div><h2>求交：光线打中球了吗</h2></div>
+  <div class="card">
+    <p>「打中了没有」这个问题，等价于：<b>把光线方程代进球面方程，看这个一元二次方程有没有实根。</b>推导只有三步：</p>
+    <div class="eq">
+球面： |X − C|² = r²
+代入： X = O + t·D
+展开： t²(<span class="op">D·D</span>) − 2t(<span class="op">D·oc</span>) + (<span class="op">oc·oc</span> − r²) = 0 &nbsp;&nbsp; <span class="cm">// oc = C − O</span>
+记作： <span class="hl">a</span>·t² − 2<span class="hl">h</span>·t + <span class="hl">c</span> = 0
+    </div>
+    <table>
+      <tr><th class="mono">系数</th><th class="mono">表达式</th><th>几何含义</th></tr>
+      <tr><td class="mono">a</td><td class="mono">D·D</td><td>方向向量的平方长度（未归一化时 ≠ 1）</td></tr>
+      <tr><td class="mono">h</td><td class="mono">D·oc</td><td>方向与「起点 → 球心」的投影（半 b 形式，标准式 b = −2h）</td></tr>
+      <tr><td class="mono">c</td><td class="mono">oc·oc − r²</td><td><b>c &lt; 0 ⟺ 起点在球内部</b></td></tr>
+    </table>
+    <div class="eq">Δ = <span class="hl">h² − a·c</span> &nbsp;&nbsp;→&nbsp;&nbsp; t₁ = (h − √Δ)/a &nbsp;<span class="cm">近根·穿入点</span>&nbsp;&nbsp; t₂ = (h + √Δ)/a &nbsp;<span class="cm">远根·穿出点</span></div>
+
+    <div class="grid2" style="margin-top:16px">
+      <div><canvas id="cv-hit" class="vpcanvas h300"></canvas><div class="cap">拖动黄点改射线方向 · 拖动球心移动球</div></div>
+      <div><canvas id="cv-quad" class="vpcanvas h260"></canvas><div class="cap">f(t) = a·t² − 2h·t + c 的图像（横轴 t）</div></div>
+    </div>
+
+    <div class="ctl">
+      <label>半径 r <input type="range" id="rg-r" min="25" max="110" value="66"><span class="val" id="lb-r">—</span></label>
+      <label><span class="pill" id="lb-disc">Δ = —</span></label>
+      <label style="margin-left:auto"><span class="pill" id="lb-verdict">—</span></label>
+    </div>
+
+    <div class="read">
+      <div><div class="k">a = D·D</div><div class="v" id="o-a">—</div></div>
+      <div><div class="k">h = D·oc</div><div class="v" id="o-h">—</div></div>
+      <div><div class="k">c = oc·oc−r²</div><div class="v" id="o-c">—</div></div>
+      <div><div class="k">Δ = h²−ac</div><div class="v" id="o-d">—</div></div>
+      <div><div class="k">t₁ 近根</div><div class="v" id="o-t1">—</div></div>
+      <div><div class="k">t₂ 远根</div><div class="v" id="o-t2">—</div></div>
+    </div>
+
+    <div class="note i"><b>关键洞察：判别式比根更重要。</b>渲染中最常问的不是「交点在哪儿」，而是「到底有没有交点」——<code>Δ &lt; 0</code> 就可以立刻跳过这个物体。<b>几何求交的性能优化，几乎全部建立在这一步的提前退出上。</b></div>
+    <div class="note w"><b>两个常见的写错点：</b>① 起点在球内部时（c &lt; 0）近根为负，<b>必须回退到远根</b>，否则相机一进球里就什么都看不见；② 筛选必须是<b>开区间</b> <code>t_min &lt; t &lt; t_max</code>，写成闭区间会在边界处重复命中自己。</div>
+  </div>
+</section>
+
+<!-- ================= §4 ================= -->
+<section id="s4">
+  <div class="sec-h"><div class="no">4</div><h2>法线 → 第一个有立体感的球</h2></div>
+  <div class="card">
+    <p>求交之后我们手里有一个交点 P。把它变成「一个球」需要的东西只有一样：<b>表面法线</b>。球面法线不需要额外计算——<b>交点减球心，再除以半径</b>就归一化了。</p>
+    <div class="eq">N = (P − C) / r &nbsp;&nbsp; <span class="cm">// |P−C| = r，所以除完天然是单位向量</span></div>
+    <div class="eq">color = 0.5 · (N + 1) &nbsp;&nbsp; <span class="cm">// 把 [−1,1] 的向量映射到 [0,1] 的颜色</span></div>
+    <p>就这两行，你已经得到了原书里第一个能看的球。下面是真的在逐像素跑（<b>拖动旋转</b>，或用按钮切换着色方式）：</p>
+    <canvas id="cv-normal" class="vpcanvas h360" style="margin-top:14px"></canvas>
+    <div class="ctl">
+      <label>着色 <select id="se-shade">
+        <option value="normal">法线着色 0.5·(N+1)</option>
+        <option value="flat">纯色（无光照信息）</option>
+        <option value="lambert">加一点漫反射</option>
+        <option value="depth">深度图</option>
+      </select></label>
+      <label>视场角 <input type="range" id="rg-fov" min="30" max="95" value="60"><span class="val" id="lb-fov">60°</span></label>
+      <button class="btn ghost" id="bt-scan">↻ 重放逐行绘制</button>
+    </div>
+    <div class="note t"><b>「图像是一行一行出来的」</b>不是比喻。原书里渲染就是外层 <code>for j</code>（行）、内层 <code>for i</code>（列），一个像素一个像素算出来的。点上面的按钮可以重看一遍这个过程。</div>
+    <div class="note i"><b>为什么用 (N+1)/2 而不是 N？</b>因为颜色不能是负数。法线的每个分量都在 <code>[−1, 1]</code>，而颜色必须在 <code>[0, 1]</code>；<code>(N+1)/2</code> 正好是一次线性映射。这也是后面所有着色公式的起点——<b>光照模型本质上就是「把法线变成一个数字」的不同方式</b>。</div>
+  </div>
+</section>
+
+<!-- ================= §5 ================= -->
+<section id="s5">
+  <div class="sec-h"><div class="no">5</div><h2>弹射的账本：albedoⁿ</h2></div>
+  <div class="card">
+    <p>前面是「一条光线只问一次」。真实感的来源是<b>接着问下去</b>：光线打到球上之后，从那个点朝某个方向再发一条，问「那个方向有多少光？」。这个值我们记作 <b>L<sub>in</sub></b>。</p>
+    <div class="note i"><b>这是最容易误解的地方：递归不产生光，只查询光。</b>球不是被「绘制」出来的对象，它是一个<b>无状态的查询函数</b>——相机不问，它就不存在。</div>
+    <p>每弹一次，颜色就要乘一次该表面的反射率（albedo）。所以整条链的结果是：</p>
+    <div class="eq">最终颜色 = <span class="hl">albedo₁ × albedo₂ × … × albedoₙ × 光源</span> &nbsp;&nbsp;<span class="cm">// n = 逃逸前的命中次数</span></div>
+    <canvas id="cv-chain" class="h220" style="background:transparent;margin-top:12px"></canvas>
+    <div class="ctl">
+      <label>播放 <button class="btn ghost" id="bt-chain">▶ 重放</button></label>
+      <label style="margin-left:auto"><span class="pill" id="lb-chain">—</span></label>
+    </div>
+    <div class="note w"><b>为什么深度不需要设得很大？</b>看这张表——albedo 稍微小于 1，连乘很快就衰减到看不见了：</div>
+    <table>
+      <tr><th class="mono">命中次数 n</th><th class="mono">系数（albedo = 0.5）</th><th>实际效果</th></tr>
+      <tr><td class="mono">0</td><td class="mono">1.0</td><td>直接看到天空</td></tr>
+      <tr><td class="mono">1</td><td class="mono">0.5</td><td>亮度减半</td></tr>
+      <tr><td class="mono">5</td><td class="mono">0.031</td><td>已经很暗</td></tr>
+      <tr><td class="mono">10</td><td class="mono">9.8 × 10⁻⁴</td><td>几乎不可见</td></tr>
+      <tr><td class="mono">50</td><td class="mono">8.9 × 10⁻¹⁶</td><td>等于黑</td></tr>
+    </table>
+    <div class="note t"><b>所以 <code>max_depth</code> 到顶返回黑色，不是 bug，是「保险丝」。</b>它的作用只是防止光线被卡在几何体之间无限递归爆栈。正常出口永远是「光线逃逸到天空」那一支。</div>
+  </div>
+</section>
+
+<!-- ================= §6 ================= -->
+<section id="s6">
+  <div class="sec-h"><div class="no">6</div><h2>真的跑一遍：渐进式路径追踪</h2></div>
+  <div class="card">
+    <div class="note t" style="margin-top:0"><b>这一节是一个真的路径追踪器</b>，跑在你的浏览器里（纯 CPU、逐像素、蒙特卡洛采样）。它会<b>一轮一轮地累积样本</b>：刚开始全是噪点，几十轮之后逐渐变干净——这就是 「noisy → clean」 的全过程，也是原书最后一张图的诞生方式。</div>
+    <canvas id="cv-pt" class="vpcanvas h420" style="margin-top:6px"></canvas>
+    <div class="ctl">
+      <label>场景 <select id="se-scene">
+        <option value="classic">经典场景（球 · 玻璃 · 金属）</option>
+        <option value="mats">材质对比（一排 5 颗）</option>
+        <option value="norm">法线着色（无光照）</option>
+      </select></label>
+      <label>最大深度 <input type="range" id="rg-depth" min="1" max="30" value="8"><span class="val" id="lb-depth">8</span></label>
+      <label>分辨率 <select id="se-res">
+        <option value="160">160 × 107 · 快</option>
+        <option value="200" selected>200 × 133 · 中</option>
+        <option value="260">260 × 173 · 细</option>
+        <option value="340">340 × 227 · 慢</option>
+      </select></label>
+      <label>光源 <select id="se-light">
+        <option value="sky" selected>只有天空</option>
+        <option value="lamp">隐藏灯泡 + 弱天空</option>
+      </select></label>
+      <label><input type="checkbox" id="ck-aa" checked> 抗锯齿（像素内抖动）</label>
+    </div>
+    <div class="ctl">
+      <button class="btn ghost" id="bt-pause">⏸ 暂停</button>
+      <button class="btn ghost" id="bt-reset">↻ 重新累积</button>
+      <button class="btn ghost" id="bt-save">⤓ 保存 PNG</button>
+      <span style="margin-left:auto"><span class="pill" id="lb-stat">准备中…</span></span>
+    </div>
+
+    <div class="read">
+      <div><div class="k">已完成轮数</div><div class="v" id="o-pass">0</div></div>
+      <div><div class="k">样本 / 像素</div><div class="v" id="o-spp">0</div></div>
+      <div><div class="k">本轮进度</div><div class="v" id="o-cur">0%</div></div>
+      <div><div class="k">已用时间</div><div class="v" id="o-time">0.0s</div></div>
+      <div><div class="k">速度</div><div class="v" id="o-speed">—</div></div>
+      <div><div class="k">理论噪声水平</div><div class="v" id="o-noise">—</div></div>
+    </div>
+
+    <div class="note i" style="margin-top:16px"><b>盯着「理论噪声水平」那一栏看。</b>蒙特卡洛的误差正比于 <b>σ/√N</b>：样本数翻 4 倍，噪声才减半。所以从 4 spp 到 64 spp，噪声只降 4 倍——而计算量翻了 16 倍。<b>这就是路径追踪里「收敛」这件事的全部真相，也是降噪算法存在的理由。</b></div>
+
+    <div class="legend">
+      <span><i style="background:#b8b4ae"></i>漫反射 Lambertian（albedo × 余弦加权采样）</span>
+      <span><i style="background:#e2e4ea"></i>金属 Metal（反射 + fuzz）</span>
+      <span><i style="background:#a8d8e8"></i>玻璃 Dielectric（折射 + Schlick）</span>
+      <span><i style="background:#ffdf7a"></i>光源 Emissive</span>
+    </div>
+    <p class="muted" style="font-size:13px;margin-top:10px">
+      <b>材质对比场景</b>里 5 颗球沿世界 <code>z</code> 轴排开（相机从 <code>x</code> 方向看，所以屏幕水平轴正好映射到 <code>z</code>）。
+      画面上<b>从左到右</b>依次是：玻璃 ior 2.4 · 玻璃 ior 1.5 · 粗糙金属 · 镜面金属 · 漫反射。
+      玻璃球在这个场景里看起来偏暗、偏"实心"，<b>不是 bug</b>——只有天空和地面可以折射，而没有内容可折射的透光球本来就是这个样子；
+      切到「经典场景」，玻璃球会把满地的小球折进自己内部，那才是它该有的样子。
+    </p>
+
+    <div class="note w"><b>把「最大深度」拖到 1，然后拖到 2、3</b>——你会看到玻璃球从「纯黑的一坨」逐渐变成「透明的」。这就是上一节那张衰减表在真实场景里的样子：深度不够时，光线还没来得及找到光源就被保险丝掐断了。</div>
+  </div>
+</section>
+
+<!-- ================= §7 ================= -->
+<section id="s7">
+  <div class="sec-h"><div class="no">7</div><h2>一条光线怎么穿过金属球和玻璃球</h2></div>
+  <div class="card">
+    <p>前面几节都是「一条光线问一次」。现在把两种材质放进同一个画面：光线先砸在<b>金属球</b>上被弹开，
+       再斜插进<b>玻璃球</b>、在球内走一段弦、从另一侧穿出去，最后打进天光。
+       <b>整条折线只用到两条定律</b>——金属球上遵守反射定律，玻璃球两个表面上各用一次 Snell 定律。
+       中间没有任何别的规则。</p>
+
+    <canvas id="cv-path" class="vpcanvas" style="height:470px;margin-top:6px"></canvas>
+    <div class="cap">2D 侧视剖面，与 §2 共用同一套世界坐标（1 格 = 1 单位）。金属球 r = 1.00，玻璃球 r = 1.20、ior = 1.5；顶部浅色横带是「天光」背景。</div>
+
+    <div class="ctl">
+      <button class="btn ghost" id="bt-path-play">▶ 播放</button>
+      <button class="btn ghost" id="bt-path-step">⏭ 单步</button>
+      <button class="btn ghost" id="bt-path-reset">↻ 重置</button>
+      <label><input type="checkbox" id="ck-path-normal" checked> 显示法线</label>
+      <label><input type="checkbox" id="ck-path-fresnel"> 分光（Fresnel 反射分支）</label>
+      <label><input type="checkbox" id="ck-path-grid" checked> 显示网格</label>
+      <span style="margin-left:auto"><span class="pill" id="lb-path">等待发射</span></span>
+    </div>
+
+    <div class="read">
+      <div><div class="k">镜面入射角 θ₁</div><div class="v" id="o-mth">—</div></div>
+      <div><div class="k">镜面反射角 θ₁′</div><div class="v" id="o-mtr">—</div></div>
+      <div><div class="k">镜面偏折量</div><div class="v" id="o-mtd">—</div></div>
+      <div><div class="k">玻璃入场 θ₂ → θ₂ₜ</div><div class="v" id="o-gin">—</div></div>
+      <div><div class="k">玻璃出场 θ₃ → θ₃′</div><div class="v" id="o-gout">—</div></div>
+      <div><div class="k">球内弦长</div><div class="v" id="o-chord">—</div></div>
+    </div>
+
+    <div class="grid2" style="margin-top:16px;gap:18px;align-items:start">
+      <div>
+        <div class="note i" id="path-now" style="margin:0;min-height:186px">
+          <b>等待发射。</b><br>按「▶ 播放」看整条光路一段段长出来，或按「⏭ 单步」一次推进一步。
+        </div>
+      </div>
+      <div>
+        <div class="ledger" id="path-ledger"></div>
+      </div>
+    </div>
+
+    <div class="note t"><b>先看金属球那一步：入射角 = 反射角，这是唯一规则。</b>
+      光线以 <b>58.50°</b> 打到球面，就以 <b>58.50°</b> 弹开（都相对法线量）。偏折量是
+      <code>180° − 2 × 58.50° = 63.00°</code>。
+      注意命中点在球的<b>上表面</b>——正因为法线朝上，斜射进来的光才可能被「顶」回右上方向。
+      控制这个的是法线朝向，不是「球会反弹」这种拟人说法。</div>
+
+    <div class="eq">金属：<span class="hl">D<sub>out</sub> = D − 2(D·N)N</span> &nbsp;&nbsp;<span class="cm">// |D| 与 |D_out| 都为 1，所以 D·N = −cosθ</span></div>
+
+    <div class="note i"><b>再看玻璃球：这里要换「介质」，所以要用 Snell 定律。</b>
+      光线从空气（n₁ = 1.0）以 50.00° 入射，进入玻璃（n₂ = 1.5）后折射角变成 30.71°——
+      <b>光线向法线靠拢</b>，这正是「光在密介质里被掰弯」的量化形式：</div>
+
+    <div class="eq">n₁ · sin θ₂ = n₂ · sin θ₂ₜ &nbsp;→&nbsp; 1.0 × sin 50.00° = 1.5 × sin 30.71° &nbsp;→&nbsp; <span class="hl">0.7660 = 1.5 × 0.5107</span> ✓</div>
+
+    <div class="note w"><b>球内那一段弦，藏着一个必须讲清楚的结论。</b>
+      光线在球内走的是弦，弦的两个端点分别在球面上。因为两端到球心的距离都等于半径 r，
+      <b>「球心—入射点—出射点」构成等腰三角形</b>，所以这条弦与两个端点的法线<b>夹角必然相等</b>。
+      把 Snell 定律反过来用一次，就得到：</div>
+
+    <div class="eq">出场入射角 θ₃ <span class="op">≡</span> 入场折射角 θ₂ₜ = <span class="hl">30.71°</span> &nbsp;&nbsp;<span class="cm">// 不是巧合，是等腰三角形的必然结果</span>
+弦长 = 2r · cos θ₂ₜ = 2 × 1.20 × cos 30.71° = <span class="hl">2.063</span></div>
+
+    <div class="note r"><b>由此可以顺手纠正一个很常见的错误想象：「光在玻璃球里会来回全反射，永远出不来」。</b>
+      不会。<b>从外部射入球体的光线，在球内永远不可能发生全内反射。</b>理由是硬的：
+      上一条等式已经证明内壁入射角恒等于入场折射角 θ₂ₜ，而 Snell 定律给出
+      <code>|sin θ₂ₜ| = sin θ₂ / n ≤ 1/n</code>，于是
+      <code>θ₂ₜ ≤ asin(1/n) = asin(1/1.5) = 41.81°</code>——
+      <b>这个上界恰好就是临界角本身，只在掠入射（θ₂ → 90°）时才取等号</b>。
+      也就是说：内壁入射角永远「刚好够不着」临界角，全内反射的条件根本触发不了。
+      真正会出现全内反射的场合，是光线<b>已经在玻璃内部</b>（比如从玻璃球内部射出，或从水下看水面），这是两个完全不同的初始条件。</div>
+
+    <div class="note i"><b>把「分光」勾上</b>，会看到玻璃球两个表面上各多出一条很暗的反射分支。
+      这是真实的 Fresnel 行为——玻璃不是全部透射，在 50° 入射时约 <b>5.8%</b> 被反射回去
+      （用 Schlick 近似或完整 Fresnel 公式都能算出这个量级）。
+      主光路是那条约 94% 的透射光；金属那边则相反，绝大多数能量都被吸收/反射掉，几乎不透明。
+      <b>「金属」和「玻璃」的差别不在几何，全在这一次分光比例上。</b></div>
+
+    <div class="note w"><b>为什么这一节用「侧视剖面」而不是渲染出来的球？</b>
+      因为 3D 渲染图里光线会被前景挡住、折射会让交点看起来「飘」在外面，很难对上号。
+      剖面图把所有东西摊在同一个平面上，交点、法线、角度都是可以直接量的。
+      §6 那个渲染器处理的是同一套物理，只是每条光线都换成了几百万条、而且每次弹射的材质系数还要逐次相乘——这也正是 §6 的图那么慢的原因。</div>
+  </div>
+</section>
+
+<!-- ================= §8 ================= -->
+<section id="s8">
+  <div class="sec-h"><div class="no">8</div><h2>一条光线会被弹几次</h2></div>
+  <div class="card">
+    <p>§7 那条路径很长，是因为它<b>恰好把两颗球都打了一遍</b>——先被金属弹开，再穿进玻璃、穿出玻璃。
+       但这属于少数情况。把相机朝前转半圈会发现：<b>三分之二的方向什么也碰不到，直接离开了场景</b>；
+       而像 §7 那样弹三次的方向，只占 <b>1.9%</b>。</p>
+    <p>这一节要补齐的就是 <code>ray_color</code> 里那个 <code>else</code> 的另一半：
+       <b>没打中时返回什么？打中一次、两次、三次又分别停在哪里？什么时候会被强行截断？</b>
+       场景、眼位、两颗球的位置与 §7 <b>完全相同</b>，唯一改变的是发射方向 α 和弹射预算 <code>max_depth</code>。</p>
+    <p>还要补上 §7 漏掉的另一半：<b>玻璃表面并不是「光一定穿过去」</b>。
+       它按 Fresnel 定律把光分成两支——反射走 R、折射走 1−R。
+       所以「这条光线弹了几次」严格说不是一个数，而是<b>一棵带概率的树</b>；
+       本节把每个玻璃命中点的反射支也画出来（橙色虚线）、列进右侧分支表，
+       并在扫描带下面把反射率随方向的变化画成一条曲线。</p>
+
+    <canvas id="cv-count" class="vpcanvas" style="height:470px;margin-top:6px"></canvas>
+    <div class="cap">与 §7 同一套几何。终点的方框标注了这条光线<b>为什么停在这里</b>——是碰到了背景，还是预算用尽。 <span id="count-cap"></span></div>
+
+    <div class="ctl">
+      <button class="btn ghost on" id="bt-cnt-m0">0 次（miss）</button>
+      <button class="btn ghost" id="bt-cnt-m1">命中 1 次</button>
+      <button class="btn ghost" id="bt-cnt-m2">命中 2 次</button>
+      <button class="btn ghost" id="bt-cnt-m3">命中 3 次</button>
+      <button class="btn ghost" id="bt-cnt-mx">maxDepth 截断</button>
+      <button class="btn ghost" id="bt-cnt-me">0 次（朝下逃逸）</button>
+      <button class="btn ghost" id="bt-cnt-all">四线对照</button>
+      <label><input type="checkbox" id="ck-cnt-normal" checked> 显示法线</label>
+      <label><input type="checkbox" id="ck-cnt-grid" checked> 显示网格</label>
+      <label><input type="checkbox" id="ck-cnt-branch" checked> 显示玻璃反射分支</label>
+      <span style="margin-left:auto"><span class="pill" id="lb-cnt">—</span></span>
+    </div>
+
+    <canvas id="cv-cone" style="height:230px;margin-top:16px"></canvas>
+    <div class="cap">把 α 从 −90° 扫到 +90°（朝前的半圈），按<b>命中次数</b>上色。
+      竖虚线是四条<b>切线方向</b>（<code>α = 球心方向 ± asin(r/D)</code>）——它们正好把方向轴切开：
+      落到虚线上就意味着光线与球面擦肩而过。点任意一段可切到对应光路。<br>
+      最下面那条曲线是<b>玻璃表面的反射率 R</b>（取这条路径<b>第一次打中玻璃时那一面</b>的
+      Fresnel 反射率）：球心方向附近只有 4%，越靠近玻璃轮廓越陡，掠射时几乎把光全部反射走——
+      <b>所以上面那些刀切一样的分界线，在真实渲染里其实是软的。</b><br>
+      这条剖面关于<b>玻璃球心方向</b>严格对称（R 只看撞击参数 <code>b = D_G·sin|α − A_G|</code>，
+      对 α = A_G ± δ 同值），所以两条切线上各有一个<b>等高</b>的掠射峰（α = −4.6° 与 21.8°，都到 96%）。
+      也正因此它的采样栅格以球心方向为心，而不是从 −90° 起数——否则两个采样点离各自切线的距离
+      会差一点（0.0092° 对 0.0014°），而掠射端最后 0.1° 的 R 就从 40% 冲到 96%，
+      同一件事会被画成两个不同的峰高；同理，画折线时也不能按下标抽稀（那样会抽掉其中一个峰）。</div>
+    <div class="spans" id="count-spans"></div>
+
+    <div class="read">
+      <div><div class="k">发射角 α</div><div class="v" id="o-ca">—</div></div>
+      <div><div class="k">命中次数 / depth</div><div class="v" id="o-chit">—</div></div>
+      <div><div class="k">终止原因</div><div class="v" id="o-cterm">—</div></div>
+      <div><div class="k">最终颜色来源</div><div class="v" id="o-ccol">—</div></div>
+      <div><div class="k">这类方向的占比</div><div class="v" id="o-cshare">—</div></div>
+      <div><div class="k">弹射预算 max_depth</div><div class="v" id="o-cdepth">—</div></div>
+      <div><div class="k">玻璃表面反射率</div><div class="v" id="o-crin">—</div></div>
+      <div><div class="k">本支概率</div><div class="v" id="o-cprob">—</div></div>
+      <div><div class="k">期望命中次数</div><div class="v" id="o-cexp">—</div></div>
+    </div>
+
+    <div style="margin-top:16px">
+      <div class="cap" style="margin-bottom:8px">同一个方向、同一条光线，其实有<b>若干种结局</b>。
+        下表把 α 当前方向上的全部分支按概率从大到小列出（概率低于 <b>1%</b> 的枝不画也不列）——
+        <b>点某一行就把这个分支当成主线单独看</b>，再点一次回到概率最大的那一支。
+        概率就是沿途各表面 Fresnel 系数的连乘，<span class="muted">而最终颜色正是这些分支的加权平均。</span></div>
+      <div class="btree" id="count-btree"></div>
+    </div>
+
+    <div class="grid2" style="margin-top:16px;gap:18px;align-items:start">
+      <div>
+        <div class="note i" id="count-now" style="margin:0;min-height:180px">
+          <b>0 次命中：光线什么也没碰到。</b><br>这是最常见的一种结局，也是最简单的一种——
+          <code>ray_color</code> 不需要任何几何计算，直接返回背景色就结束了。
+        </div>
+      </div>
+      <div>
+        <div class="ledger" id="count-ledger"></div>
+      </div>
+    </div>
+
+    <div class="note t"><b>原书 <code>ray_color</code> 的骨架就是这个 if / else——命中次数不是「结果」，是「递归深度」。</b>
+      每次打中表面，就把「我看到什么」这个问题<b>换到交点上再问一遍</b>；问题是同一个，起点变了。
+      所谓「弹射 3 次」，就是这条链子连着问了 3 次，第 4 次问到了空处（背景色），于是层层返回、逐层乘上材质系数。</div>
+
+    <div class="eq">if (world.<span class="op">hit</span>(r, t_min, t_max, rec)) &nbsp;<span class="cm">// 打中了 → 换个起点继续问</span>
+&nbsp;&nbsp;&nbsp;&nbsp;return <span class="hl">attenuation × ray_color(new_ray, depth − 1)</span>;
+return <span class="hl">sky_color(unit_direction)</span> &nbsp;<span class="cm">// 没打中 → 背景色，链子到此为止</span>
+
+<span class="cm">// 而 max_depth 是给这条链子上的保险丝：</span>
+if (<span class="op">depth</span> &lt;= 0) return <span class="hl">color(0, 0, 0)</span> &nbsp;<span class="cm">// 预算用尽 → 黑，不再往下问</span></div>
+
+    <div class="note w"><b>为什么 §6 那个渲染器必须打几百万条光线？看看这条方向轴就明白了。</b>
+      单条光线弹得越多次，它对最终像素颜色的贡献链条就越长。而在这套几何里：
+      <b>0 次命中占 65.9% 的方向，1 次占 17.5%，2 次占 14.7%，3 次只有 1.9%</b>。
+      也就是说，随机撒出去的光线里，绝大多数一条材质系数都没乘上就返回了背景色；
+      真正承载「金属 + 玻璃」信息的那一小撮，只占不到 2%。
+      <b>想让画面稳定，就得把这一小撮的贡献采样足够多次</b>——这就是 §6 要累积成百上千轮的原因。</div>
+
+    <div class="note i"><b>「命中两次」那条值得单独看一眼：它自己证明了 §7 的结论。</b>
+      这条光线从空气以 <b>40.80°</b> 斜射进玻璃，折射后变成 <b>25.82°</b>；在球内走完弦，
+      从另一侧出来时入射角恰好又是 <b>25.82°</b>，折射回空气正好回到 <b>40.80°</b>——
+      <b>两端完全对称</b>。这不是凑出来的，正是 §7 那个「球心—入射点—出射点构成等腰三角形」的必然结果。
+      所以玻璃球永远不会把光「困」在里面：进去多少角度，出来还是多少角度。</div>
+
+    <div class="note w"><b>但上面每一个「命中几次」，都只是这条光线若干种走法里概率最大的那一种。</b>
+      金属球是理想镜面，方向唯一；<b>玻璃表面却不是——它按 Fresnel 把光分成两支</b>：
+      反射走 R、折射走 1−R，两支都要继续问下去。所以 α = −38° 那条标称「3 次命中」的路径，
+      实际只覆盖了 <b>88.80%</b> 的光：另有 <b>5.77%</b> 在<b>入场那一刻就被表面反射掉</b>
+      （只打 2 次，颜色链是「背景色 × 金属 × 玻璃」，压根没有第二次折射），
+      还有 <b>5.12%</b> 在<b>出场面被反射回球内</b>、多走一条弦再出来（打 4 次）。<br>
+      <b>这就是「把因素考虑全」的意思：</b>每条分支的概率 = 沿途各表面 R 的连乘，
+      而 <code>ray_color</code> 最终返回的是这些分支的<b>加权平均</b>。§6 那个渲染器每条光线
+      「随机选一支」正是为了用样本把这个平均积出来。</div>
+
+    <div class="note i"><b>一个漂亮的巧合（在这六条示范路径上严格成立）：期望命中次数 = 只走折射分支时的命中次数。</b>
+      取 p = R = 5.77%、q = 1−p。<b>入场反射那支</b>概率 p，命中数 2（金属 + 这次入场），
+      贡献 <code>2p</code>；<b>入场折射那支</b>进球后要「内反射 k 次再出射」，
+      命中数 3 + k、概率 q·p<sup>k</sup>·q，求和得 <code>Σ q²p<sup>k</sup>(3+k) = 3q + p</code>。
+      合起来 <code>E = 2p + 3q + p = 3q + 3p = 3</code>——<b>恰好等于只走折射分支的那个 3。</b><br>
+      <span class="muted">直观说：2 次那支比 3 次少 1，4 次那支比 3 次多 1，
+      而两支的概率正好由 p 与 q 配平，偏差互相抵消了。所以「只数折射分支」在<b>均值</b>上确实不算错。
+      但它丢掉了方差、丢掉了额外的线段，也丢掉了颜色链。而且一般方向上这个等式会破：
+      反射出去的那支可能又打中别的物体。本页扫过整条方向轴，最大偏差 <b>0.41 次</b>，
+      正好出现在掠射附近——那时反射率高达 70%，被反射走的光又撞上了金属球。</span></div>
+
+    <div class="note t"><b>扫描带那四条笔直的边界，在真实渲染里是软的。</b>
+      球心方向附近的正入射只有 <b>4.00%</b>（正是 Schlick 的极限值
+      <code>((1−1.5)/(1+1.5))² = 0.04</code>），但只要入射角往 90° 靠，
+      R 就一路飙上去：60° 时 8.9%、80° 时 38.8%、89° 时 90.4%。<br>
+      而「往 90° 靠」在几何上就等于<b>靠近玻璃球的轮廓</b>——所以玻璃球边缘那一圈
+      永远是亮的（Fresnel 边缘增亮），而且<b>掠射的光几乎全被反射走、几乎不折射</b>。<br>
+      <span class="muted">这正是扫描带下面那条曲线的形状：球心附近趴在 4% 上，
+      两端冲向高处。它说明「命中 2 次 / 3 次」这些分类在边界附近会糊掉——
+      真实渲染里那里是两支混在一起的，只有本页这种「只走折射」的示意才会得到刀切一样的分界。</span></div>
+
+    <div class="note r"><b>别把「弹射次数」和「有几个交点」混起来——这是两个不同的问题。</b>
+      §3 讲的 <code>Δ</code> 判别式回答的是「这条光线与这一颗球<b>有几个交点</b>」：Δ &lt; 0 一个没有、
+      Δ = 0 恰好相切一个、Δ &gt; 0 两个。而这一节讲的「命中几次」是「<b>这条光线一路问了几次</b>」，
+      是在多颗物体、多次反弹之间累加的。<br>
+      两者的关系只有一个：<b>线在球面上命中一次，才可能产生一次新的弹射</b>。
+      相切（Δ = 0）这种「刚好擦过」的情况是测度为零的事件、数值上也不稳定，
+      所以本页不把它做成动画——它属于 §3 那张 <code>f(t)</code> 抛物线要讲的事，不是本节要讲的事。</div>
+  </div>
+</section>
+
+<!-- ================= §9 ================= -->
+<section id="s9">
+  <div class="sec-h"><div class="no">9</div><h2>五个常见误区</h2></div>
+  <div class="card">
+    <div class="note r"><b>① 「光线追踪就是全局光照」</b><br>
+      不是。基础版只做「直视 + 简单反弹」，实际能力介于直接光与完整全局光之间。真正的全局光照要解决的是渲染方程的完整积分——那是另一个量级的工程问题。</div>
+
+    <div class="note r"><b>② 「光线是从光源发出的」</b><br>
+      真实的物理光路确实如此，但<b>从光源出发做计算是死路</b>：一个像素占据的立体角可能只有 10⁻⁸，发一亿条光线也可能一条都打不中相机。所以实际做法是<b>反向追踪</b>，靠的是光路可逆性（Helmholtz 互易性）：同一条折线反着走，光量不变。</div>
+
+    <div class="note r"><b>③ 「一个像素发一条光线就够了」</b><br>
+      一条光线只能回答「这一个方向有多少光」。抗锯齿需要多条（像素内抖动），软阴影需要多条（朝光源区域抖动），全局光照需要多条（半球随机方向）。<b>「多条取平均」不是可选的优化，它是渲染方程唯一的求解手段。</b></div>
+
+    <div class="note r"><b>④ 「交点自己会发光」</b><br>
+      初学者最容易带走的一个错误直觉。<code>ray_color</code> 的返回值永远是同一个量：<b>从光线方向入射到起点的光量</b>。命中表面不是终点，是「换到那个点，继续追问光的来源」。混淆这一点，在做直接光采样（NEE）时会彻底找不到北。</div>
+
+    <div class="note r"><b>⑤ 「噪声是配置不对造成的 bug」</b><br>
+      噪声是蒙特卡洛方法的固有性质，来自统计涨落，幅度约 <b>σ/√N</b>。与之相对的是「画面平滑」——它来自几何连续性（相邻像素法线几乎相同）。<b>两者来源完全不同，所以解决手段也完全不同</b>：前者加样本或降噪，后者是几何本身的性质。</div>
+  </div>
+</section>
+
+<!-- ================= §10 ================= -->
+<section id="s10">
+  <div class="sec-h"><div class="no">10</div><h2>对照原书与原笔记</h2></div>
+  <div class="card">
+    <table>
+      <tr><th>《Ray Tracing in One Weekend》</th><th>本页演示</th><th>项目笔记</th></tr>
+      <tr><td>Ch.1 Output an Image<br><span class="muted">「图像是一行一行出来的」</span></td><td><a href="#s4">§4 逐行绘制按钮</a></td><td class="mono">—</td></tr>
+      <tr><td>Ch.2–3 The vec3 Class / Rays<br><span class="muted">P(t) = A + t·B</span></td><td><a href="#s2">§2 光线参数化</a></td><td class="mono">射线与几何体求交 §1.1</td></tr>
+      <tr><td>Ch.6 Surface Normals and Multiple Objects<br><span class="muted">0.5·(N+1) 着色</span></td><td><a href="#s4">§4 法线着色</a></td><td class="mono">射线与几何体求交 §1.4</td></tr>
+      <tr><td>Ch.6 球面求交<br><span class="muted">判别式与近根 / 远根</span></td><td><a href="#s3">§3 求交 + f(t) 曲线</a></td><td class="mono">射线与几何体求交 §1.1–1.3</td></tr>
+      <tr><td>Ch.7 Moving the Camera<br><span class="muted">viewport / pixel00_loc</span></td><td><a href="#s4">§4 拖动旋转</a> · <a href="#s6">§6 相机</a></td><td class="mono">—</td></tr>
+      <tr><td>Ch.8 Antialiasing<br><span class="muted">像素内多点采样</span></td><td><a href="#s6">§6 抗锯齿开关</a></td><td class="mono">—</td></tr>
+      <tr><td>Ch.9 Diffuse Materials<br><span class="muted">normal + random_unit_vector()</span></td><td><a href="#s5">§5 弹射账本</a></td><td class="mono">路径追踪与蒙特卡洛积分 §2</td></tr>
+      <tr><td>Ch.10 Metal<br><span class="muted">反射 + fuzz</span></td><td><a href="#s6">§6 材质对比</a> · <a href="#s7">§7 单条反射光路</a></td><td class="mono">—</td></tr>
+      <tr><td>Ch.11 Dielectrics<br><span class="muted">折射 + Schlick 近似</span></td><td><a href="#s6">§6 玻璃球</a> · <a href="#s7">§7 Snell 两步折射</a></td><td class="mono">—</td></tr>
+      <tr><td>递归终止条件<br><span class="muted">hit → 换起点再问 · miss → 背景色 · depth 用尽 → 黑</span></td><td><a href="#s8">§8 命中 0/1/2/3 次与 maxDepth 截断</a></td><td class="mono">路径追踪与蒙特卡洛积分 §3</td></tr>
+      <tr><td>Ch.13 Final Scene<br><span class="muted">大量随机小球</span></td><td><a href="#s6">§6 经典场景</a></td><td class="mono">路径追踪与蒙特卡洛积分 §5.2</td></tr>
+    </table>
+
+    <div class="note i"><b>关于 <code>normal + random_unit_vector()</code> 为什么是这个写法。</b>它生成的随机方向恰好服从余弦分布 <b>p(ω) = cosθ/π</b>，代进估计器里 <code>cosθ</code> 与 <code>π</code> 正好约掉，估计器化简成最简单的平均值。§6 的渲染器用的就是这个采样方式——它看起来随意，其实是推导出来的。</div>
+
+    <footer>
+      <b>相关笔记（本仓库）</b>
+      <ul>
+        <li><code>docs/20-Knowledge/Concepts/射线与几何体求交.md</code> — 推导、近根/远根、t_min/t_max 语义、法线朝向</li>
+        <li><code>docs/20-Knowledge/Concepts/路径追踪与蒙特卡洛积分.md</code> — 反向追踪、估计器、衰减、边界与陷阱</li>
+        <li><code>docs/20-Knowledge/Concepts/光照模型.md</code> — 着色与 BRDF 演进</li>
+      </ul>
+      <p class="muted" style="font-size:12.5px">参考原文：<a href="https://raytracing.github.io/books/RayTracingInOneWeekend.html" target="_blank" rel="noreferrer">Ray Tracing in One Weekend</a> ·
+      本页面为单文件、零外部依赖（无 CDN、无字体、无网络请求），可直接离线打开。</p>
+    </footer>
+  </div>
+</section>
+
+</main>
+</div>
+
+<script>
+"use strict";
+/* =====================================================================
+   公共工具
+   ===================================================================== */
+var $ = function(s, r){ return (r||document).querySelector(s); };
+var $$ = function(s, r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); };
+var clamp = function(v,a,b){ return v<a?a:(v>b?b:v); };
+var lerp = function(a,b,t){ return a+(b-a)*t; };
+
+/* 按 DPR 适配画布，返回 CSS 像素坐标系下的 ctx */
+function fit(cv){
+  var dpr = Math.min(window.devicePixelRatio||1, 2);
+  var w = Math.max(1, Math.round(cv.clientWidth));
+  var h = Math.max(1, Math.round(cv.clientHeight));
+  cv.width = Math.round(w*dpr); cv.height = Math.round(h*dpr);
+  var ctx = cv.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  return {ctx:ctx, w:w, h:h};
+}
+/* 确定性随机（保证每次刷新场景一致） */
+function mulberry32(a){
+  return function(){
+    a = a + 0x6D2B79F5 | 0;
+    var t = Math.imul(a ^ a>>>15, 1|a);
+    t = t + Math.imul(t ^ t>>>7, 61|t) ^ t;
+    return ((t ^ t>>>14)>>>0) / 4294967296;
+  };
+}
+/* 节流重绘 */
+function onResize(fn){
+  var to=null;
+  window.addEventListener('resize', function(){ clearTimeout(to); to=setTimeout(fn,160); });
+}
+
+/* =====================================================================
+   §1  光栅化 vs 光线追踪
+   ===================================================================== */
+(function(){
+  var cvA = $('#cv-raster'), cvB = $('#cv-rt');
+  if(!cvA || !cvB) return;
+
+  /* --- 共用 3D 场景：眼睛在原点，看向 −Z，屏幕在 z = −1 平面 --- */
+  var SX = 0.42, SY = 0.30;                       // 屏幕在 z=−1 处的半宽 / 半高
+  var TRI = [ [-0.55,0.22,-2.30], [0.58,0.08,-2.38], [0.00,-0.66,-2.16] ];
+  var COLS = 22, ROWS = 16;
+
+  function sub(a,b){ return [a[0]-b[0], a[1]-b[1], a[2]-b[2]]; }
+  function cross(a,b){ return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]; }
+  function dot(a,b){ return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]; }
+
+  /* Möller–Trumbore：射线 —— 三角形 */
+  function rayTri(o, d){
+    var v0=TRI[0], e1=sub(TRI[1],v0), e2=sub(TRI[2],v0);
+    var p = cross(d,e2), det = dot(e1,p);
+    if(Math.abs(det) < 1e-9) return -1;
+    var inv = 1/det, tv = sub(o,v0);
+    var u = dot(tv,p)*inv;  if(u<0||u>1) return -1;
+    var q = cross(tv,e1);
+    var v = dot(d,q)*inv;   if(v<0||u+v>1) return -1;
+    var t = dot(e2,q)*inv;
+    return t>0 ? t : -1;
+  }
+  /* 世界点 → 屏幕 NDC（x 右为正，y 上为正） */
+  function ndc(P){ var z=-P[2]; return [P[0]/z/SX, P[1]/z/SY]; }
+  /* NDC 三角形的顶点 */
+  var NT = TRI.map(ndc);
+  function inTri(u,v){
+    function s(a,b,c){ return (b[0]-a[0])*(c[1]-a[1])-(c[0]-a[0])*(b[1]-a[1]); }
+    var d1=s(NT[0],NT[1],[u,v]), d2=s(NT[1],NT[2],[u,v]), d3=s(NT[2],NT[0],[u,v]);
+    var neg = (d1<0)||(d2<0)||(d3<0), pos = (d1>0)||(d2>0)||(d3>0);
+    return !(neg&&pos);
+  }
+
+  /* --- 每个 cell 的命中预计算（两边共用同一份） --- */
+  var hitRaster = new Uint8Array(COLS*ROWS);   // 光栅化：投影后测试
+  var hitRT     = new Uint8Array(COLS*ROWS);   // 光线追踪：真射线求交
+  var i,j;
+  for(j=0;j<ROWS;j++){
+    for(i=0;i<COLS;i++){
+      var u = -1 + 2*(i+0.5)/COLS;
+      var v =  1 - 2*(j+0.5)/ROWS;
+      var k = j*COLS+i;
+      hitRaster[k] = inTri(u,v) ? 1 : 0;
+      hitRT[k]     = (rayTri([0,0,0],[u*SX, v*SY, -1]) > 0) ? 1 : 0;
+    }
+  }
+
+  /* --- 示意画法：世界点 → 画布坐标（侧视 + 俯视的混合示意） --- */
+  function sch(P, W, H){
+    var x = 0.74*W + ((-P[2])-2.10)/0.30 * 0.20*W;
+    var y = 0.52*H - P[1]*0.46*H;
+    return [x,y];
+  }
+
+  var prog = 0, playing = true;
+  var rgProg = $('#rg-prog'), lbProg = $('#lb-prog'), btPlay = $('#bt-play');
+  if(rgProg){
+    rgProg.addEventListener('input', function(){ prog = +this.value/1000; playing=false; draw(); });
+  }
+  if(btPlay){
+    btPlay.addEventListener('click', function(){
+      playing = !playing;
+      this.textContent = playing ? '⏸ 暂停' : '▶ 播放';
+    });
+  }
+
+  function drawPanel(cv, mode){
+    if(!cv) return;
+    var f = fit(cv), ctx = f.ctx, W = f.w, H = f.h;
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle = '#0c1017'; ctx.fillRect(0,0,W,H);
+
+    var SW = 0.30*W;            // 屏幕所在 x
+    var topY = 0.16*H, botY = 0.88*H;
+    var eye = [0.09*W, 0.52*H];
+
+    /* 进度：0.00–0.18 高亮几何，0.18–0.36 投影/准备，0.36–1.0 扫描 */
+    var sweep = clamp((prog-0.36)/0.64, 0, 1);
+    var curRow = Math.floor(sweep*ROWS);
+
+    /* ---- 屏幕 ---- */
+    ctx.fillStyle = 'rgba(255,255,255,0.045)';
+    ctx.strokeStyle = (mode==='rt' && prog<0.36) ? '#7c78ff' : 'rgba(255,255,255,0.22)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.rect(SW-9, topY, 18, botY-topY); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = 'rgba(200,210,240,0.5)';
+    ctx.font = '500 11px ui-monospace,Consolas,monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('屏幕', SW, topY-12);
+
+    /* ---- 眼睛 ---- */
+    ctx.fillStyle = (mode==='rt') ? '#7c78ff' : 'rgba(255,255,255,0.35)';
+    ctx.beginPath(); ctx.arc(eye[0], eye[1], 7, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = 'rgba(200,210,240,0.5)';
+    ctx.fillText('眼睛', eye[0], eye[1]+26);
+
+    /* ---- 三角形 ---- */
+    var P0 = sch(TRI[0],W,H), P1 = sch(TRI[1],W,H), P2 = sch(TRI[2],W,H);
+    var triLit = (mode==='raster' && prog<0.36) || mode==='rt';
+    ctx.beginPath(); ctx.moveTo(P0[0],P0[1]); ctx.lineTo(P1[0],P1[1]); ctx.lineTo(P2[0],P2[1]); ctx.closePath();
+    ctx.fillStyle = triLit ? 'rgba(120,116,255,0.20)' : 'rgba(255,255,255,0.06)';
+    ctx.fill();
+    ctx.strokeStyle = triLit ? '#7c78ff' : 'rgba(255,255,255,0.35)';
+    ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = 'rgba(200,210,240,0.5)';
+    ctx.fillText('几何体', (P0[0]+P1[0]+P2[0])/3, Math.min(P0[1],P1[1],P2[1])-14);
+
+    /* ---- 光栅化模式：顶点投影线 ---- */
+    if(mode==='raster' && prog>0.14){
+      var al = clamp((prog-0.14)/0.22, 0, 1);
+      ctx.save();
+      ctx.setLineDash([4,5]);
+      ctx.strokeStyle = 'rgba(124,120,255,'+(0.55*al)+')';
+      ctx.lineWidth = 1.2;
+      for(var v=0;v<3;v++){
+        var s = sch(TRI[v],W,H);
+        ctx.beginPath(); ctx.moveTo(s[0],s[1]); ctx.lineTo(SW, s[1]); ctx.stroke();
+      }
+      ctx.restore();
+      ctx.fillStyle = 'rgba(124,120,255,'+(0.9*al)+')';
+      ctx.font = '600 11px ui-monospace,Consolas,monospace';
+      if(al>0.6) ctx.fillText('投影 → 算出覆盖哪些像素', SW+0.06*W, topY-12);
+    }
+
+    /* ---- 光线追踪模式：当前扫描行的射线 ---- */
+    if(mode==='rt' && sweep>0){
+      for(var row=0; row<=curRow && row<ROWS; row++){
+        var fade = (row===curRow) ? 1 : clamp(1-(curRow-row)*0.20, 0.05, 0.4);
+        for(var c=0;c<COLS;c++){
+          var u = -1 + 2*(c+0.5)/COLS;
+          var vv =  1 - 2*(row+0.5)/ROWS;
+          var d = [u*SX, vv*SY, -1];
+          var t = rayTri([0,0,0], d);
+          var y = topY + (row+0.5)/ROWS*(botY-topY);
+          if(t>0){
+            var hp = sch([d[0]*t, d[1]*t, d[2]*t], W, H);
+            ctx.strokeStyle = 'rgba(255,214,102,'+(0.75*fade)+')';
+            ctx.lineWidth = 1.1;
+            ctx.beginPath(); ctx.moveTo(eye[0],eye[1]); ctx.lineTo(hp[0],hp[1]); ctx.stroke();
+          } else if(row===curRow){
+            ctx.strokeStyle = 'rgba(160,175,215,0.16)';
+            ctx.lineWidth = 1;
+            var end = [SW+16, y];
+            ctx.beginPath(); ctx.moveTo(eye[0],eye[1]); ctx.lineTo(end[0],end[1]); ctx.stroke();
+          }
+        }
+      }
+    }
+
+    /* ---- 输出图像（右下小窗） ---- */
+    var OW = 0.34*W, OH = OW*(ROWS/COLS)*1.0;
+    var OX = W-OW-0.05*W, OY = 0.10*H;
+    ctx.fillStyle = 'rgba(255,255,255,0.05)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.rect(OX,OY,OW,OH); ctx.fill(); ctx.stroke();
+    var cw = OW/COLS, chh = OH/ROWS;
+    for(var rj=0; rj<ROWS; rj++){
+      if(rj>curRow) break;
+      for(var ri=0; ri<COLS; ri++){
+        var kk = rj*COLS+ri;
+        var on = (mode==='raster') ? hitRaster[kk] : hitRT[kk];
+        if(!on) continue;
+        ctx.fillStyle = (rj===curRow) ? '#ffd666' : '#7c78ff';
+        ctx.fillRect(OX+ri*cw+0.5, OY+rj*chh+0.5, cw-1, chh-1);
+      }
+    }
+    ctx.fillStyle = 'rgba(200,210,240,0.62)';
+    ctx.font = '500 10.5px ui-monospace,Consolas,monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('输出图像（相同）', OX, OY+OH+16);
+    ctx.textAlign = 'center';
+
+    /* 扫描行指示 */
+    if(sweep>0 && sweep<1){
+      var ly = topY + (curRow+0.5)/ROWS*(botY-topY);
+      ctx.strokeStyle = 'rgba(255,214,102,0.35)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(SW+14, ly); ctx.lineTo(W-0.02*W, ly); ctx.stroke();
+    }
+  }
+
+  function draw(){
+    drawPanel(cvA,'raster');
+    drawPanel(cvB,'rt');
+    if(lbProg) lbProg.textContent = Math.round(prog*100)+'%';
+    if(rgProg && playing) rgProg.value = Math.round(prog*1000);
+  }
+
+  var last = 0;
+  function loop(ts){
+    if(!last) last = ts;
+    var dt = ts-last; last = ts;
+    if(playing){
+      prog += dt/7000;            // 约 7 秒一轮
+      if(prog>1.18) prog = 0;
+    }
+    draw();
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+  onResize(draw);
+})();
+
+/* =====================================================================
+   §2  P(t) = O + t·D
+   ===================================================================== */
+(function(){
+  var cv = $('#cv-ray'); if(!cv) return;
+  var rgT = $('#rg-t'), rgAng = $('#rg-ang'), rgLen = $('#rg-len'), lbRay = $('#lb-ray');
+
+  var autoT = true, t = 0, dirT = 1;
+  function state(){
+    var ang = (+rgAng.value)*Math.PI/180;
+    var len = +rgLen.value;
+    return { ang:ang, len:len };
+  }
+  if(rgT) rgT.addEventListener('input', function(){ autoT=false; t = (+this.value)/100; });
+  $$('#cv-ray ~ .ctl input').forEach(function(el){
+    el.addEventListener('input', function(){ if(el!==rgT) autoT = true; });
+  });
+
+  function draw(){
+    var f = fit(cv), ctx = f.ctx, W = f.w, H = f.h;
+    var st = state();
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle = '#0c1017'; ctx.fillRect(0,0,W,H);
+
+    var O = [0.17*W, 0.62*H];
+    var D = [Math.cos(st.ang)*st.len, Math.sin(st.ang)*st.len];
+    var U = 100;                               // 100px = 1 单位
+
+    /* 网格 */
+    ctx.strokeStyle = 'rgba(255,255,255,0.045)'; ctx.lineWidth = 1;
+    for(var gx=O[0]%U; gx<W; gx+=U){ ctx.beginPath(); ctx.moveTo(gx,0); ctx.lineTo(gx,H); ctx.stroke(); }
+    for(var gy=O[1]%U; gy<H; gy+=U){ ctx.beginPath(); ctx.moveTo(0,gy); ctx.lineTo(W,gy); ctx.stroke(); }
+
+    /* t < 0 的虚线部分（相机背后） */
+    ctx.save();
+    ctx.setLineDash([5,6]);
+    ctx.strokeStyle = 'rgba(190,60,90,0.45)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(O[0],O[1]); ctx.lineTo(O[0]-1.2*D[0], O[1]-1.2*D[1]); ctx.stroke();
+    ctx.restore();
+
+    /* t > 0 的实线部分 */
+    var end = [O[0]+3.4*D[0], O[1]+3.4*D[1]];
+    ctx.strokeStyle = 'rgba(124,120,255,0.35)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(O[0],O[1]); ctx.lineTo(end[0],end[1]); ctx.stroke();
+
+    /* 方向向量 D */
+    ctx.strokeStyle = '#ffd666'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(O[0],O[1]); ctx.lineTo(O[0]+D[0],O[1]+D[1]); ctx.stroke();
+    arrow(ctx, O[0], O[1], O[0]+D[0], O[1]+D[1], '#ffd666');
+
+    /* 点 P = O + t·D */
+    var P = [O[0]+t*D[0], O[1]+t*D[1]];
+    ctx.strokeStyle = 'rgba(255,255,255,0.16)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(O[0]+D[0],O[1]+D[1]); ctx.lineTo(P[0],P[1]); ctx.stroke();
+
+    ctx.fillStyle = '#0e9384';
+    ctx.beginPath(); ctx.arc(P[0],P[1], 9, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = '#eafffb'; ctx.lineWidth = 2; ctx.stroke();
+
+    /* O 点 */
+    ctx.fillStyle = '#7c78ff';
+    ctx.beginPath(); ctx.arc(O[0],O[1], 7, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+
+    /* 标注 */
+    ctx.font = '600 12px ui-monospace,Consolas,monospace';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#9a95ff'; ctx.fillText('O 起点', O[0]-8, O[1]+26);
+    ctx.fillStyle = '#ffd666'; ctx.fillText('D 方向', O[0]+D[0]+8, O[1]+D[1]-4);
+    ctx.fillStyle = '#4fd6c2'; ctx.fillText('P(t)', P[0]+13, P[1]+4);
+
+    /* 右下角读数 */
+    ctx.fillStyle = 'rgba(255,255,255,0.055)';
+    ctx.beginPath(); ctx.rect(W-232, H-96, 216, 78); ctx.fill();
+    ctx.font = '600 12.5px ui-monospace,Consolas,monospace';
+    ctx.fillStyle = '#c9cfe2';
+    ctx.fillText('O = (0.00, 0.00)', W-220, H-72);
+    ctx.fillText('D = ('+(D[0]/U).toFixed(2)+', '+(-D[1]/U).toFixed(2)+')   |D|='+(st.len/U).toFixed(2), W-220, H-52);
+    ctx.fillStyle = '#4fd6c2';
+    ctx.fillText('t = '+t.toFixed(2)+'   P = ('+(t*D[0]/U).toFixed(2)+', '+(-t*D[1]/U).toFixed(2)+')', W-220, H-32);
+
+    if(lbRay) lbRay.textContent = 't = '+t.toFixed(2)+'   P = '+(t*D[0]/U).toFixed(2)+', '+(-t*D[1]/U).toFixed(2);
+  }
+  function arrow(ctx,x1,y1,x2,y2,col){
+    var a = Math.atan2(y2-y1, x2-x1), L = 11;
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.moveTo(x2,y2);
+    ctx.lineTo(x2-L*Math.cos(a-0.4), y2-L*Math.sin(a-0.4));
+    ctx.lineTo(x2-L*Math.cos(a+0.4), y2-L*Math.sin(a+0.4));
+    ctx.closePath(); ctx.fill();
+  }
+
+  var last=0;
+  function loop(ts){
+    if(!last) last=ts; var dt=ts-last; last=ts;
+    if(autoT){
+      t += dirT*dt/1600;
+      if(t>3.2){ t=3.2; dirT=-1; }
+      if(t<0){ t=0; dirT=1; }
+      if(rgT) rgT.value = Math.round(t*100);
+    }
+    draw();
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+  onResize(draw);
+})();
+
+/* =====================================================================
+   §3  光线 × 球 求交
+   ===================================================================== */
+(function(){
+  var cvG = $('#cv-hit'), cvQ = $('#cv-quad');
+  if(!cvG || !cvQ) return;
+  var rgR = $('#rg-r'), lbR = $('#lb-r'), lbDisc = $('#lb-disc'), lbVerdict = $('#lb-verdict');
+  var O = { x: 0.55, y: 1.35 };                 // 射线起点（世界坐标）
+  var C = { x: 5.6, y: 3.0 };                   // 球心
+  var HND = { x: 9.2, y: 4.6 };                 // 方向手柄
+  var r = 1.7;
+  var drag = null;
+  var W2 = 10, H2 = 6;                          // 世界范围 10 × 6
+
+  function view(f, pad){                        // 世界 → 画布
+    var S = Math.min((f.w-2*pad)/W2, (f.h-2*pad)/H2);
+    return { S:S, ox:pad, oy:f.h-pad,
+             x:function(wx){ return pad + wx*S; },
+             y:function(wy){ return f.h-pad - wy*S; } };
+  }
+
+  function calc(){
+    var dx = HND.x-O.x, dy = HND.y-O.y;
+    var cx = C.x-O.x, cy = C.y-O.y;
+    var a = dx*dx+dy*dy;
+    var h = dx*cx+dy*cy;
+    var c = cx*cx+cy*cy - r*r;
+    var disc = h*h - a*c;
+    var t1=NaN,t2=NaN;
+    if(disc>=0){
+      var s = Math.sqrt(disc);
+      t1 = (h-s)/a; t2 = (h+s)/a;
+    }
+    return {dx:dx,dy:dy,a:a,h:h,c:c,disc:disc,t1:t1,t2:t2,occ:[cx,cy]};
+  }
+  /* 有效根：先近后远 */
+  function validRoot(q){
+    if(q.disc<0) return NaN;
+    if(q.t1>1e-3) return q.t1;
+    if(q.t2>1e-3) return q.t2;
+    return NaN;
+  }
+
+  if(rgR) rgR.addEventListener('input', function(){ r = (+this.value)/40; draw(); });
+
+  function drawGeom(){
+    var f = fit(cvG), ctx = f.ctx;
+    var V = view(f, 44);
+    var q = calc();
+    ctx.clearRect(0,0,f.w,f.h);
+    ctx.fillStyle = '#0c1017'; ctx.fillRect(0,0,f.w,f.h);
+
+    /* 网格 */
+    ctx.strokeStyle = 'rgba(255,255,255,0.04)'; ctx.lineWidth = 1;
+    for(var gx=0; gx<=W2; gx++){ ctx.beginPath(); ctx.moveTo(V.x(gx),0); ctx.lineTo(V.x(gx),f.h); ctx.stroke(); }
+    for(var gy=0; gy<=H2; gy++){ ctx.beginPath(); ctx.moveTo(0,V.y(gy)); ctx.lineTo(f.w,V.y(gy)); ctx.stroke(); }
+
+    /* 球 */
+    var grad = ctx.createRadialGradient(V.x(C.x)-r*V.S*0.3, V.y(C.y)-r*V.S*0.3, r*V.S*0.1, V.x(C.x), V.y(C.y), r*V.S);
+    grad.addColorStop(0,'rgba(124,120,255,0.30)');
+    grad.addColorStop(1,'rgba(124,120,255,0.09)');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(V.x(C.x), V.y(C.y), r*V.S, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = '#7c78ff'; ctx.lineWidth = 2; ctx.stroke();
+
+    /* 射线 */
+    var Tmax = 11;
+    var dlen = Math.hypot(q.dx,q.dy) || 1;
+    var ux = q.dx/dlen, uy = q.dy/dlen;
+    ctx.strokeStyle = 'rgba(255,214,102,0.85)'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(V.x(O.x), V.y(O.y));
+    ctx.lineTo(V.x(O.x+ux*Tmax), V.y(O.y+uy*Tmax));
+    ctx.stroke();
+
+    /* 交点。
+       注意：t₁/t₂ 是「沿【未归一化】方向 D 的参数」——见右侧读数表的 a = D·D（未归一化时 ≠ 1）。
+       所以落点必须写成 P = O + t·D。先前误用了单位方向 O + t·û，落点被拉近 |D| 倍
+       （本页默认 |D| ≈ 9.24），两个交点全挤到原点附近，看着就不在圆周上。 */
+    function mark(t, col, label){
+      var px = O.x + q.dx*t, py = O.y + q.dy*t;
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.arc(V.x(px), V.y(py), 6.5, 0, Math.PI*2); ctx.fill();
+      ctx.strokeStyle='#fff'; ctx.lineWidth=1.6; ctx.stroke();
+      ctx.font='600 11.5px ui-monospace,Consolas,monospace';
+      ctx.fillStyle=col; ctx.textAlign='left';
+      ctx.fillText(label+'  t='+t.toFixed(3), V.x(px)+12, V.y(py)-8);
+    }
+    var vr = validRoot(q);
+    if(q.disc>=0){
+      /* 有效根就是某一根时，把「命中」并进那个标记；否则两个标记和两段文字会叠在同一处 */
+      var t1Hit = (q.t1===vr), t2Hit = (q.t2===vr);
+      if(q.t1>0) mark(q.t1, 'rgba(255,214,102,0.55)', t1Hit?'t₁ 命中':'t₁');
+      if(q.t2>0 && Math.abs(q.t2-q.t1)>1e-5) mark(q.t2, 'rgba(255,214,102,0.55)', t2Hit?'t₂ 命中':'t₂');
+      if(!isNaN(vr) && !t1Hit && !t2Hit) mark(vr, '#0fd6a8', '命中');
+    }
+
+    /* O 点 + 手柄 */
+    ctx.fillStyle='#7c78ff';
+    ctx.beginPath(); ctx.arc(V.x(O.x),V.y(O.y),7,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.stroke();
+    ctx.font='600 11.5px ui-monospace,Consolas,monospace'; ctx.textAlign='left';
+    ctx.fillStyle='#9a95ff'; ctx.fillText('O', V.x(O.x)-4, V.y(O.y)+22);
+
+    ctx.fillStyle='#ffd666';
+    ctx.beginPath(); ctx.arc(V.x(HND.x),V.y(HND.y),8,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='#0c1017'; ctx.lineWidth=2; ctx.stroke();
+    ctx.fillStyle='#ffd666'; ctx.fillText('D →', V.x(HND.x)+13, V.y(HND.y)+4);
+
+    /* 无交点提示 */
+    if(q.disc<0){
+      ctx.fillStyle='rgba(190,18,60,0.88)';
+      ctx.beginPath(); ctx.rect(14,14,196,32); ctx.fill();
+      ctx.fillStyle='#fff';
+      ctx.font='600 13px ui-monospace,Consolas,monospace'; ctx.textAlign='left';
+      ctx.fillText('Δ < 0  →  没打中，直接跳过', 26, 35);
+    } else {
+      ctx.fillStyle='rgba(14,147,132,0.85)';
+      ctx.beginPath(); ctx.rect(14,14,196,32); ctx.fill();
+      ctx.fillStyle='#fff';
+      ctx.font='600 13px ui-monospace,Consolas,monospace'; ctx.textAlign='left';
+      ctx.fillText('Δ > 0  →  两交点，取近根', 26, 35);
+    }
+    return q;
+  }
+
+  function drawQuad(q){
+    var f = fit(cvQ), ctx = f.ctx;
+    ctx.clearRect(0,0,f.w,f.h);
+    ctx.fillStyle = '#0c1017'; ctx.fillRect(0,0,f.w,f.h);
+
+    var pad = { l:44, r:16, t:18, b:30 };
+    var tMaxPlot = 11;
+    /* f(t) 的采样范围 */
+    var vals = [];
+    var n=220, i;
+    for(i=0;i<=n;i++){
+      var tt = i/n*tMaxPlot;
+      vals.push({ t:tt, v: q.a*tt*tt - 2*q.h*tt + q.c });
+    }
+    var vmin = Infinity, vmax = -Infinity;
+    vals.forEach(function(o){ vmin=Math.min(vmin,o.v); vmax=Math.max(vmax,o.v); });
+    vmin = Math.min(vmin, -0.5); vmax = Math.max(vmax, 0.5);
+    /* 对称留白 */
+    var span = Math.max(Math.abs(vmin), Math.abs(vmax))*1.25 || 1;
+    vmin = -span; vmax = span;
+
+    var X = function(t){ return pad.l + t/tMaxPlot*(f.w-pad.l-pad.r); };
+    var Y = function(v){ return pad.t + (vmax-v)/(vmax-vmin)*(f.h-pad.t-pad.b); };
+
+    /* 零轴 */
+    ctx.strokeStyle='rgba(255,255,255,0.22)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(pad.l,Y(0)); ctx.lineTo(f.w-pad.r,Y(0)); ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,0.10)';
+    ctx.beginPath(); ctx.moveTo(pad.l,pad.t); ctx.lineTo(pad.l,f.h-pad.b); ctx.stroke();
+
+    /* 刻度 */
+    ctx.fillStyle='rgba(200,210,240,0.42)';
+    ctx.font='500 10.5px ui-monospace,Consolas,monospace'; ctx.textAlign='center';
+    for(var tk=0; tk<=10; tk+=2) ctx.fillText(String(tk), X(tk), f.h-pad.b+16);
+    ctx.textAlign='right';
+    ctx.fillText('f(t)', pad.l-8, pad.t+2);
+    ctx.textAlign='center';
+    ctx.fillText('t  →', f.w/2, f.h-6);
+
+    /* 曲线 */
+    ctx.strokeStyle='#ffd666'; ctx.lineWidth=2.4;
+    ctx.beginPath();
+    vals.forEach(function(o,idx){ idx? ctx.lineTo(X(o.t),Y(o.v)) : ctx.moveTo(X(o.t),Y(o.v)); });
+    ctx.stroke();
+
+    /* 抛物线顶点（t = h/a） */
+    var tv = q.h/q.a;
+    if(tv>=0 && tv<=tMaxPlot){
+      var vv = q.a*tv*tv - 2*q.h*tv + q.c;
+      ctx.fillStyle='rgba(255,214,102,0.5)';
+      ctx.beginPath(); ctx.arc(X(tv),Y(vv),3.5,0,Math.PI*2); ctx.fill();
+    }
+
+    /* 根 */
+    if(q.disc>=0){
+      [q.t1,q.t2].forEach(function(t){
+        if(t<0 || t>tMaxPlot) return;
+        var px=X(t);
+        ctx.strokeStyle='#0fd6a8'; ctx.lineWidth=2;
+        ctx.beginPath(); ctx.moveTo(px,pad.t); ctx.lineTo(px,f.h-pad.b); ctx.stroke();
+        ctx.fillStyle='#0fd6a8';
+        ctx.beginPath(); ctx.arc(px,Y(0),5.5,0,Math.PI*2); ctx.fill();
+        ctx.font='600 11px ui-monospace,Consolas,monospace'; ctx.textAlign='center';
+        ctx.fillText(t===q.t1?'t₁':'t₂', px, pad.t+12);
+      });
+    } else {
+      ctx.fillStyle='rgba(190,18,60,0.9)';
+      ctx.font='600 13px ui-monospace,Consolas,monospace'; ctx.textAlign='center';
+      ctx.fillText('曲线不与 f(t)=0 相交', f.w/2, Y(0)-14);
+      ctx.font='500 11.5px ui-monospace,Consolas,monospace';
+      ctx.fillStyle='rgba(200,210,240,0.5)';
+      ctx.fillText('顶点在零轴上方 → 无实根', f.w/2, Y(0)+22);
+    }
+  }
+
+  function updateReadout(q){
+    var set = function(id, txt, cls){
+      var el=$(id); if(!el) return;
+      el.textContent = txt;
+      el.className = 'v' + (cls?(' '+cls):'');
+    };
+    var vr = validRoot(q);
+    set('#o-a', q.a.toFixed(3));
+    set('#o-h', q.h.toFixed(3));
+    set('#o-c', q.c.toFixed(3));
+    set('#o-d', q.disc.toFixed(3), q.disc>=0?'ok':'no');
+    set('#o-t1', isNaN(q.t1)?'无':q.t1.toFixed(3), (q.t1>0?'ok':'no'));
+    set('#o-t2', isNaN(q.t2)?'无':q.t2.toFixed(3), (q.t2>0?'ok':'no'));
+    if(lbR) lbR.textContent = r.toFixed(2);
+    if(lbDisc) lbDisc.textContent = 'Δ = ' + q.disc.toFixed(2);
+    if(lbVerdict){
+      if(q.disc<0) lbVerdict.textContent = '不相交（Δ < 0）';
+      else if(isNaN(vr)) lbVerdict.textContent = '有交点但都在背后（t ≤ 0）';
+      else if(q.c<0) lbVerdict.textContent = '起点在球内 → 取远根 t₂';
+      else lbVerdict.textContent = '取近根 t₁';
+    }
+  }
+
+  function draw(){ var q = drawGeom(); drawQuad(q); updateReadout(q); }
+
+  /* 拖拽 */
+  function pos(e, cv){
+    var rc = cv.getBoundingClientRect();
+    return [e.clientX-rc.left, e.clientY-rc.top];
+  }
+  function toWorld(p, f, pad){
+    var V = view(f,pad);
+    return { x:(p[0]-pad)/V.S, y:(f.h-pad-p[1])/V.S };
+  }
+  cvG.addEventListener('pointerdown', function(e){
+    var f = fit(cvG), pad=44, p = pos(e,cvG), w = toWorld(p,f,pad);
+    var dH = Math.hypot(w.x-HND.x, w.y-HND.y), dC = Math.hypot(w.x-C.x, w.y-C.y);
+    drag = (dH <= dC) ? 'hand' : 'ball';
+    cvG.setPointerCapture(e.pointerId);
+    onMove(e);
+  });
+  function onMove(e){
+    if(!drag) return;
+    var f = fit(cvG), pad=44, p = pos(e,cvG), w = toWorld(p,f,pad);
+    if(drag==='hand'){ HND.x = clamp(w.x, 0.2, 14); HND.y = clamp(w.y, -1, 8); }
+    else { C.x = clamp(w.x, 1.0, 8.6); C.y = clamp(w.y, 0.6, 5.2); }
+    draw();
+  }
+  cvG.addEventListener('pointermove', onMove);
+  cvG.addEventListener('pointerup', function(){ drag=null; });
+  cvG.addEventListener('pointercancel', function(){ drag=null; });
+
+  draw();
+  onResize(draw);
+})();
+
+/* =====================================================================
+   §4  法线着色（真实逐像素渲染）
+   ===================================================================== */
+(function(){
+  var cv = $('#cv-normal'); if(!cv) return;
+  var seShade = $('#se-shade'), rgFov = $('#rg-fov'), lbFov = $('#lb-fov'), btScan = $('#bt-scan');
+
+  /* 离屏缓冲：宽度取显示宽度的 RES_SCALE 倍，高度【必须】按画布实际宽高比推导。
+     两者都要随画布尺寸变化——写死成 168x116 时，画布是 810x360（比例 2.25），
+     blit 里的 drawImage 会把比例 1.45 的缓冲水平拉伸 1.55 倍，球就从圆变成横椭圆。 */
+  var RES_SCALE = 0.42;
+  var LOW = { W: 168, H: 116 };
+  var off = null, octx = null, img = null, buf = null;
+  function ensureBuffer(){
+    var cw = Math.max(1, cv.clientWidth), ch = Math.max(1, cv.clientHeight);
+    var w = Math.min(420, Math.max(120, Math.round(cw*RES_SCALE)));
+    var h = Math.max(2, Math.round(w*ch/cw));
+    if(off && LOW.W===w && LOW.H===h) return;          // 尺寸没变就不重建
+    LOW.W = w; LOW.H = h;
+    if(!off){ off = document.createElement('canvas'); octx = off.getContext('2d'); }
+    off.width = w; off.height = h;
+    img = octx.createImageData(w, h);
+    buf = img.data;
+  }
+
+  var yaw = 0.62, pitch = 0.30, drag = null, px0 = 0, py0 = 0;
+  var reveal = LOW.H;                    // 逐行揭示的行数
+  var scanning = false;
+  var fovDeg = 60;
+  var shadeMode = 'normal';
+
+  /* 相机：看向原点，半径 4.2 */
+  function buildCam(aspect){
+    var d = 4.2;
+    var ex = d*Math.cos(pitch)*Math.sin(yaw), ey = d*Math.sin(pitch), ez = d*Math.cos(pitch)*Math.cos(yaw);
+    var L = Math.sqrt(ex*ex+ey*ey+ez*ez) || 1;
+    var wx = ex/L, wy = ey/L, wz = ez/L;               // w = normalize(eye)
+    var upx=0, upy=1, upz=0;
+    var ux = upy*wz-upz*wy, uy = upz*wx-upx*wz, uz = upx*wy-upy*wx;
+    var ul = Math.sqrt(ux*ux+uy*uy+uz*uz) || 1; ux/=ul; uy/=ul; uz/=ul;
+    var vx = wy*uz-wz*uy, vy = wz*ux-wx*uz, vz = wx*uy-wy*ux;   // v = cross(w,u)
+    var th = Math.tan(fovDeg*Math.PI/180/2);
+    var hh = th, hw = th*aspect;
+    // pdu = 2*hw*u/W ; pdv = -2*hh*v/H
+    var W = LOW.W, H = LOW.H;
+    var dux = 2*hw*ux/W, duy = 2*hw*uy/W, duz = 2*hw*uz/W;
+    var dvx = -2*hh*vx/H, dvy = -2*hh*vy/H, dvz = -2*hh*vz/H;
+    // p00 = eye - w - (hw*u) - (-hh*v) + 0.5*(pdu+pdv)
+    var px = ex - wx - hw*ux + hh*vx + 0.5*(dux+dvx);
+    var py = ey - wy - hw*uy + hh*vy + 0.5*(duy+dvy);
+    var pz = ez - wz - hw*uz + hh*vz + 0.5*(duz+dvz);
+    return {ex:ex,ey:ey,ez:ez, px:px,py:py,pz:pz, dux:dux,duy:duy,duz:duz, dvx:dvx,dvy:dvy,dvz:dvz};
+  }
+
+  function render(revealRows){
+    var cam = buildCam(LOW.W/LOW.H);
+    var maxRow = (revealRows===undefined) ? LOW.H : revealRows;
+    for(var j=0;j<maxRow;j++){
+      for(var i=0;i<LOW.W;i++){
+        var dx = cam.px + i*cam.dux + j*cam.dvx - cam.ex;
+        var dy = cam.py + i*cam.duy + j*cam.dvy - cam.ey;
+        var dz = cam.pz + i*cam.duz + j*cam.dvz - cam.ez;
+        // 球：中心原点、半径 1。遵循笔记口径：oc = C − O，h = D·oc
+        var a = dx*dx+dy*dy+dz*dz;
+        var hb = -(cam.ex*dx + cam.ey*dy + cam.ez*dz);             // D·(0,0,0 − eye)
+        var c = cam.ex*cam.ex + cam.ey*cam.ey + cam.ez*cam.ez - 1; // oc·oc − r²
+        var disc = hb*hb - a*c;
+        var r=0,g=0,b=0, k=(j*LOW.W+i)*4;
+        if(disc>0){
+          var sq = Math.sqrt(disc);
+          var t = (hb-sq)/a;                       // hb 就是半 b 形式的 h = D·(C−O)，根为 (h ∓ √Δ)/a
+          if(t<1e-3){ t = (hb+sq)/a; }              // 起点在球内时近根为负 → 回退远根
+          if(t>1e-3){
+            var hx = cam.ex+t*dx, hy = cam.ey+t*dy, hz = cam.ez+t*dz;
+            var nx = hx, ny = hy, nz = hz;                 // 单位球 → 法线即交点坐标
+            if(shadeMode==='normal'){
+              r = (nx+1)*0.5*255; g=(ny+1)*0.5*255; b=(nz+1)*0.5*255;
+            } else if(shadeMode==='flat'){
+              r=232; g=198; b=102;
+            } else if(shadeMode==='lambert'){
+              var Lx=0.6,Ly=0.75,Lz=0.28;
+              var nl = Math.sqrt(Lx*Lx+Ly*Ly+Lz*Lz); Lx/=nl;Ly/=nl;Lz/=nl;
+              var lam = Math.max(0, nx*Lx+ny*Ly+nz*Lz);
+              var amb = 0.10, dif = 0.88;
+              var v = amb + dif*lam;
+              r = 232*v; g = 198*v; b = 102*v;
+            } else {
+              var vv = clamp((t-3.2)/2.6, 0, 1);
+              var val = 1-vv;
+              r = val*180+30; g=val*200+35; b=val*255+40;
+            }
+          }
+        } else if(shadeMode==='lambert'){
+          // 天空渐变
+          var dl = Math.sqrt(dx*dx+dy*dy+dz*dz)||1;
+          var uy2 = dy/dl;
+          var tt2 = 0.5*(uy2+1);
+          r = lerp(255, 128, tt2); g = lerp(255, 179, tt2); b = lerp(255, 255, tt2);
+        } else if(shadeMode==='depth'){
+          r=12; g=16; b=22;
+        }
+        buf[k]=r; buf[k+1]=g; buf[k+2]=b; buf[k+3]=255;
+      }
+    }
+    if(revealRows!==undefined && revealRows<=0){
+      for(var kk=0; kk<buf.length; kk+=4){ buf[kk]=12; buf[kk+1]=16; buf[kk+2]=22; buf[kk+3]=255; }
+    } else if(revealRows!==undefined && revealRows<LOW.H){
+      var start = revealRows*LOW.W*4;
+      for(var k2=start; k2<buf.length; k2+=4){ buf[k2]=12; buf[k2+1]=16; buf[k2+2]=22; buf[k2+3]=255; }
+    }
+    octx.putImageData(img,0,0);
+  }
+
+  function blit(){
+    var f = fit(cv), ctx = f.ctx;
+    ctx.fillStyle = '#0c1017'; ctx.fillRect(0,0,f.w,f.h);
+    ctx.imageSmoothingEnabled = true;
+    if(ctx.imageSmoothingQuality) ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(off, 0, 0, f.w, f.h);
+    ctx.fillStyle='rgba(200,210,240,0.45)';
+    ctx.font='500 11px ui-monospace,Consolas,monospace'; ctx.textAlign='left';
+    var label = {normal:'color = 0.5·(N+1)', flat:'color = 常量', lambert:'color = albedo × (环境 + 漫反射)', depth:'color = f(t)'}[shadeMode];
+    ctx.fillText(label, 14, f.h-14);
+  }
+
+  function full(){ ensureBuffer(); reveal = LOW.H; render(); blit(); }
+
+  if(seShade) seShade.addEventListener('change', function(){ shadeMode=this.value; full(); });
+  if(rgFov) rgFov.addEventListener('input', function(){
+    fovDeg = +this.value; if(lbFov) lbFov.textContent = fovDeg+'°'; full();
+  });
+  if(btScan) btScan.addEventListener('click', function(){ scanning = true; reveal = 0; });
+
+  /* 拖拽旋转 */
+  cv.addEventListener('pointerdown', function(e){
+    drag = true; px0 = e.clientX; py0 = e.clientY;
+    cv.setPointerCapture(e.pointerId);
+  });
+  cv.addEventListener('pointermove', function(e){
+    if(!drag) return;
+    yaw += (e.clientX-px0)*0.008;
+    pitch = clamp(pitch - (e.clientY-py0)*0.006, -1.45, 1.45);
+    px0 = e.clientX; py0 = e.clientY;
+    full();
+  });
+  cv.addEventListener('pointerup', function(){ drag=false; });
+  cv.addEventListener('pointercancel', function(){ drag=false; });
+
+  full();
+
+  var last=0;
+  function loop(ts){
+    if(!last) last=ts; var dt=ts-last; last=ts;
+    if(scanning){
+      reveal += dt*LOW.H/900;                 // 约 0.9 秒渲染完一整屏（与缓冲行数无关）
+      if(reveal>=LOW.H){ reveal = LOW.H; scanning = false; }
+      render(Math.max(0,Math.floor(reveal)));
+      blit();
+    }
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+  onResize(function(){ full(); });
+})();
+
+/* =====================================================================
+   §5  弹射账本
+   ===================================================================== */
+(function(){
+  var cv = $('#cv-chain'); if(!cv) return;
+  var btChain = $('#bt-chain'), lbChain = $('#lb-chain');
+
+  /* 链条：从右往左（反向追踪：先拿到最远端的光） */
+  var NODES = [
+    { name:'相机',      sub:'像素出发',        col:'#7c78ff', fade:1.0,  kind:'cam'  },
+    { name:'球 A',      sub:'漫反射 0.80',     col:'#b8b4ae', fade:0.80, kind:'mat'  },
+    { name:'球 B',      sub:'金属 0.90',       col:'#e2e4ea', fade:0.90, kind:'mat'  },
+    { name:'球 C',      sub:'漫反射 0.60',     col:'#8d8a86', fade:0.60, kind:'mat'  },
+    { name:'天空',      sub:'L = 1.00',        col:'#8fc6f0', fade:1.0,  kind:'sky'  }
+  ];
+
+  var prog = 0, playing = true;
+  if(btChain) btChain.addEventListener('click', function(){ prog = 0; playing = true; });
+
+  function draw(){
+    var f = fit(cv), ctx = f.ctx, W = f.w, H = f.h;
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle='#0c1017'; ctx.fillRect(0,0,W,H);
+
+    var n = NODES.length;
+    var padL = 44, padR = 44;
+    var gap = (W-padL-padR)/(n-1);
+    var cy = 0.52*H;
+    var R = Math.min(30, gap*0.30);
+
+    /* 进度：0–0.15 静置；之后从右往左一段段点亮 */
+    var p2 = clamp((prog-0.12)/0.88, 0, 1);
+    var seg = p2*n;                     // 已推进的段数（0..n）
+
+    /* 连线 */
+    for(var i=0;i<n-1;i++){
+      var x1 = padL+i*gap+R, x2 = padL+(i+1)*gap-R;
+      var lit = (seg > (n-2-i)+0.45);
+      ctx.strokeStyle = lit ? 'rgba(255,214,102,0.9)' : 'rgba(255,255,255,0.13)';
+      ctx.lineWidth = lit ? 2.6 : 1.6;
+      ctx.beginPath(); ctx.moveTo(x1,cy); ctx.lineTo(x2,cy); ctx.stroke();
+      /* 箭头：指向左（光往回乘） */
+      if(lit){
+        ctx.fillStyle='rgba(255,214,102,0.9)';
+        ctx.beginPath();
+        ctx.moveTo(x2-1,cy); ctx.lineTo(x2-9,cy-5); ctx.lineTo(x2-9,cy+5);
+        ctx.closePath(); ctx.fill();
+      }
+    }
+
+    /* 节点 */
+    for(var k=0;k<n;k++){
+      var x = padL+k*gap;
+      var active = (seg > (n-1-k));
+      var isCam = (k===0);
+
+      ctx.beginPath(); ctx.arc(x,cy,R,0,Math.PI*2);
+      ctx.fillStyle = active ? NODES[k].col : 'rgba(255,255,255,0.07)';
+      ctx.globalAlpha = active ? (isCam?1:0.9) : 1;
+      ctx.fill(); ctx.globalAlpha = 1;
+      ctx.strokeStyle = active ? '#fff' : 'rgba(255,255,255,0.20)';
+      ctx.lineWidth = active ? 2.4 : 1.4;
+      ctx.stroke();
+
+      /* 图标 */
+      ctx.fillStyle = active ? 'rgba(12,16,23,0.85)' : 'rgba(255,255,255,0.28)';
+      ctx.font = '600 15px ui-monospace,Consolas,monospace';
+      ctx.textAlign='center';
+      ctx.fillText(isCam?'◉':(k===n-1?'☀':'●'), x, cy+5);
+
+      /* 标签 */
+      ctx.font='600 12.5px ui-monospace,Consolas,monospace';
+      ctx.fillStyle = active ? '#e6eaf5' : 'rgba(200,210,240,0.38)';
+      ctx.fillText(NODES[k].name, x, cy+R+20);
+      ctx.font='500 11px ui-monospace,Consolas,monospace';
+      ctx.fillStyle = active ? 'rgba(200,210,240,0.62)' : 'rgba(200,210,240,0.24)';
+      ctx.fillText(NODES[k].sub, x, cy+R+37);
+    }
+
+    /* 累乘过程：从右往左依次显示部分积 */
+    var acc = 1;
+    var accs = new Array(n);
+    accs[n-1] = 1;                       // 天空
+    for(var m=n-2;m>=0;m--){ acc = acc*NODES[m].fade; accs[m]=acc; }
+    // 注意：NODES[0] 是相机（不参与衰减），其值 = 右侧所有材质连乘
+    for(var q=0;q<n;q++){
+      var xq = padL+q*gap;
+      var on = (seg > (n-1-q));
+      if(!on) continue;
+      ctx.font='600 12px ui-monospace,Consolas,monospace';
+      ctx.textAlign='center';
+      ctx.fillStyle = '#ffd666';
+      if(q===0){
+        ctx.fillText('L = '+accs[0].toFixed(3), xq, cy-R-14);
+      } else if(q===n-1){
+        ctx.fillText('1.000', xq, cy-R-14);
+      } else {
+        ctx.fillText('×'+NODES[q].fade.toFixed(2), xq, cy-R-14);
+      }
+    }
+
+    /* 底部：最终颜色色块 */
+    var finalV = accs[0];
+    var bw = W-2*padL, bh = 26, by = H-bh-16, bx = padL;
+    ctx.fillStyle='rgba(255,255,255,0.06)';
+    ctx.beginPath(); ctx.rect(bx,by,bw,bh); ctx.fill();
+    var col = Math.round(clamp(Math.sqrt(finalV),0,1)*255);   // gamma 2.0
+    ctx.fillStyle = 'rgb('+col+','+col+','+col+')';
+    var shown = (seg > 0.5);
+    ctx.beginPath(); ctx.rect(bx,by, shown ? bw : 0, bh); ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,0.18)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.rect(bx,by,bw,bh); ctx.stroke();
+    ctx.fillStyle='rgba(200,210,240,0.7)';
+    ctx.font='600 11.5px ui-monospace,Consolas,monospace'; ctx.textAlign='left';
+    ctx.fillText('相机读到的颜色  = 0.80 × 0.90 × 0.60 × 1.00 = '+finalV.toFixed(3)+'   →  像素灰度 '+col, bx+12, by+bh/2+4);
+
+    /* 结论浮现 */
+    if(seg > n*0.75){
+      ctx.textAlign='right';
+      ctx.fillStyle='rgba(255,214,102,0.92)';
+      ctx.font='600 12.5px ui-monospace,Consolas,monospace';
+      ctx.fillText('递归不产生光，只查询光 —— 每一步都在问「那个方向有多少光？」', W-padR, cy-R-14-24);
+    }
+
+    if(lbChain){
+      lbChain.textContent = seg<=0.5 ? '等待发射' :
+        (seg>=n-0.5 ? '完成：L = '+finalV.toFixed(3) : '已回溯 '+Math.floor(seg)+' / '+n+' 段');
+    }
+  }
+
+  var last=0;
+  function loop(ts){
+    if(!last) last=ts; var dt=ts-last; last=ts;
+    if(playing){
+      prog += dt/4200;
+      if(prog>1.55){ prog=1.55; }
+    }
+    draw();
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+  onResize(draw);
+})();
+
+/* =====================================================================
+   §6  渐进式路径追踪器
+   ===================================================================== */
+(function(){
+  var cv = $('#cv-pt'); if(!cv) return;
+  var seScene = $('#se-scene'), seRes = $('#se-res'), seLight = $('#se-light'), ckAA = $('#ck-aa');
+  var rgDepth = $('#rg-depth'), lbDepth = $('#lb-depth');
+  var btPause = $('#bt-pause'), btReset = $('#bt-reset'), btSave = $('#bt-save'), lbStat = $('#lb-stat');
+  var oPass=$('#o-pass'), oSpp=$('#o-spp'), oCur=$('#o-cur'), oTime=$('#o-time'), oSpeed=$('#o-speed'), oNoise=$('#o-noise');
+
+  /* ---------- 场景数据（扁平数组，热循环友好） ---------- */
+  var S = { x:[], y:[], z:[], r:[], m:[], a:[], b:[], c:[], fuzz:[], ior:[] };
+  var NS = 0;
+  function add(x,y,z,r,m,ar,bg,bb,fz,io){
+    S.x.push(x); S.y.push(y); S.z.push(z); S.r.push(r); S.m.push(m);
+    S.a.push(ar); S.b.push(bg); S.c.push(bb); S.fuzz.push(fz||0); S.ior.push(io||1.5);
+  }
+  /* m: 0=lambertian 1=metal 2=dielectric 3=emissive */
+
+  var LAMP = { x:0, y:6.2, z:0, r:1.5 };
+
+  function buildClassic(){
+    S = { x:[],y:[],z:[],r:[],m:[],a:[],b:[],c:[],fuzz:[],ior:[] };
+    var rnd = mulberry32(20260922);
+    /* 三颗大球放在数组最前：让 best 尽快缩小，后面的廉价剔除更有效 */
+    add(-2.9,1.0,0, 1.0, 0, 0.62,0.30,0.22,0,1.5);                      // 漫反射
+    add( 0.0,1.0,0, 1.0, 2, 1,1,1,0,1.50);                              // 玻璃
+    add( 2.9,1.0,0, 1.0, 1, 0.86,0.86,0.90,0.04,1.5);                   // 金属
+    /* 小球随机场：范围按实测的可见地面标定 */
+    var X0=-9.5, X1=5.5, Z0=-7.5, Z1=3.5, STEP=1.3;
+    for(var cx=X0; cx<=X1+1e-9; cx+=STEP){
+      for(var cz=Z0; cz<=Z1+1e-9; cz+=STEP){
+        var px = cx + (rnd()-0.5)*0.5;
+        var pz = cz + (rnd()-0.5)*0.5;
+        if(Math.hypot(px+2.9, pz) < 1.55) continue;
+        if(Math.hypot(px,      pz) < 1.55) continue;
+        if(Math.hypot(px-2.9,  pz) < 1.55) continue;
+        var rr = rnd(), cr = rnd(), cg = rnd(), cb = rnd();
+        if(rr < 0.62){
+          add(px,0.2,pz,0.2, 0, cr,cg,cb, 0,1.5);
+        } else if(rr < 0.88){
+          add(px,0.2,pz,0.2, 1, 0.5+0.5*cr, 0.5+0.5*cg, 0.5+0.5*cb, 0.25*rnd(), 1.5);
+        } else {
+          add(px,0.2,pz,0.2, 2, 1,1,1, 0, 1.5);
+        }
+      }
+    }
+    add(0,-1000,0, 1000, 0, 0.60,0.60,0.57,0,1.5);                      // 地面放最后
+    if(lampOn) add(LAMP.x,LAMP.y,LAMP.z, LAMP.r, 3, 7.0,6.6,5.8,0,1.5);
+    NS = S.x.length;
+  }
+
+  function buildMats(){
+    S = { x:[],y:[],z:[],r:[],m:[],a:[],b:[],c:[],fuzz:[],ior:[] };
+    add(0,-1000,0,1000, 0, 0.60,0.60,0.57,0,1.5);
+    /* 必须沿世界 z 轴排开：相机的屏幕水平轴映射到 z 轴，沿 x 排会全部叠在画面中部 */
+    var zs = [-3.2,-1.6,0,1.6,3.2];
+    add(0,0.7,zs[0],0.7, 0, 0.80,0.26,0.26,0,1.5);                      // 漫反射
+    add(0,0.7,zs[1],0.7, 1, 0.92,0.92,0.95,0.00,1.5);                   // 镜面金属
+    add(0,0.7,zs[2],0.7, 1, 0.90,0.72,0.40,0.45,1.5);                   // 粗糙金属
+    add(0,0.7,zs[3],0.7, 2, 1,1,1,0,1.50);                              // 玻璃 1.5
+    add(0,0.7,zs[4],0.7, 2, 1,1,1,0,2.40);                              // 玻璃 2.4（近钻石，镜头效应明显）
+    if(lampOn) add(LAMP.x,LAMP.y,LAMP.z, LAMP.r, 3, 7.0,6.6,5.8,0,1.5);
+    NS = S.x.length;
+  }
+
+  /* ---------- 相机 ---------- */
+  var CAM = {};
+  var CAM_CFG = { eye:[13,2.0,3.0], look:[1.4,0.72,0], vfov:20 };
+  function buildCam(aspect){
+    var look = CAM_CFG.look;
+    var ex=CAM_CFG.eye[0], ey=CAM_CFG.eye[1], ez=CAM_CFG.eye[2];
+    var wx=ex-look[0], wy=ey-look[1], wz=ez-look[2];
+    var L=Math.sqrt(wx*wx+wy*wy+wz*wz); wx/=L; wy/=L; wz/=L;   // w = normalize(eye − target)
+    var ux = wz, uy = 0, uz = -wx;                             // u = normalize(cross(vup=(0,1,0), w))
+    var ul=Math.sqrt(ux*ux+uy*uy+uz*uz)||1; ux/=ul; uy/=ul; uz/=ul;
+    var vx = wy*uz-wz*uy, vy = wz*ux-wx*uz, vz = wx*uy-wy*ux;  // v = cross(w, u)
+    var th = Math.tan(CAM_CFG.vfov*Math.PI/180/2);
+    var hh = th, hw = th*aspect;      // 视口置于距离 1 处 → hw/hh 即半视场角的正切
+    var W = LOW.W, H = LOW.H;
+    var dux = 2*hw*ux/W, duy = 2*hw*uy/W, duz = 2*hw*uz/W;
+    var dvx = -2*hh*vx/H, dvy = -2*hh*vy/H, dvz = -2*hh*vz/H;
+    var px = ex - wx - hw*ux + hh*vx + 0.5*(dux+dvx);
+    var py = ey - wy - hw*uy + hh*vy + 0.5*(duy+dvy);
+    var pz = ez - wz - hw*uz + hh*vz + 0.5*(duz+dvz);
+    CAM = {ex:ex,ey:ey,ez:ez, px:px,py:py,pz:pz, dux:dux,duy:duy,duz:duz, dvx:dvx,dvy:dvy,dvz:dvz};
+  }
+
+  /* ---------- 随机数（mulberry32，热路径） ---------- */
+  var RNG = mulberry32(1234567);
+
+  /* 半球随机单位向量：写到 _rx/_ry/_rz，避免分配 */
+  var _rx=0,_ry=0,_rz=0;
+  function randUnit(){
+    for(var guard=0; guard<64; guard++){
+      var x=RNG()*2-1, y=RNG()*2-1, z=RNG()*2-1;
+      var s=x*x+y*y+z*z;
+      if(s>1e-6 && s<1) { var k=1/Math.sqrt(s); _rx=x*k; _ry=y*k; _rz=z*k; return; }
+    }
+    _rx=0; _ry=1; _rz=0;
+  }
+
+  var maxDepth = 8, lampOn = false;
+  var accum, cnt, LOW = {W:200,H:133};
+  var off = document.createElement('canvas');
+  var octx = null, img = null, buf = null;
+
+  function alloc(){
+    accum = new Float64Array(LOW.W*LOW.H*3);
+    cnt   = new Uint32Array(LOW.W*LOW.H);
+    off.width = LOW.W; off.height = LOW.H;
+    octx = off.getContext('2d');
+    img = octx.createImageData(LOW.W, LOW.H);
+    buf = img.data;
+  }
+
+  /* ---------- 核心：ray_color（迭代版，等价于链式递归） ---------- */
+  function rayColor(ox,oy,oz, dx,dy,dz, out){
+    var ar=1, ag=1, ab=1;
+    var dl0 = Math.sqrt(dx*dx+dy*dy+dz*dz) || 1;      // 首条光线归一化，让 t 有距离语义
+    dx/=dl0; dy/=dl0; dz/=dl0;
+
+    for(var depth=0; depth<maxDepth; depth++){
+      var best = Infinity, bi = -1;
+      var a = dx*dx+dy*dy+dz*dz;
+      for(var i=0;i<NS;i++){
+        var lx = S.x[i]-ox, ly = S.y[i]-oy, lz = S.z[i]-oz;   // oc = C − O
+        var ri = S.r[i];
+        var h = dx*lx+dy*ly+dz*lz;                    // 半 b 形式：h = D·oc
+        /* 廉价剔除：h 是「到球心的最近接近距离」，只需一次点积 */
+        if(h + ri < 0) continue;                      // 整颗球在射线起点背后
+        if(h - ri > best) continue;                   // 即使最近点也比已命中的更远
+        var c = lx*lx+ly*ly+lz*lz - ri*ri;
+        var disc = h*h - a*c;
+        if(disc <= 0) continue;
+        var sq = Math.sqrt(disc);
+        var t = (h-sq)/a;
+        if(t <= 1e-3){ t = (h+sq)/a; if(t <= 1e-3) continue; }
+        if(t < best){ best = t; bi = i; }
+      }
+
+      if(bi < 0){                                     // 逃逸到天空
+        var t2 = 0.5*(dy+1);
+        var sky = lampOn ? 0.13 : 1.0;
+        out[0] = ar*lerp(1.0,0.5,t2)*sky;
+        out[1] = ag*lerp(1.0,0.7,t2)*sky;
+        out[2] = ab*lerp(1.0,1.0,t2)*sky;
+        return;
+      }
+
+      var i2 = bi, t3 = best;
+      var hx = ox+t3*dx, hy = oy+t3*dy, hz = oz+t3*dz;
+      var nx = (hx-S.x[i2])/S.r[i2];
+      var ny = (hy-S.y[i2])/S.r[i2];
+      var nz = (hz-S.z[i2])/S.r[i2];
+      var mt = S.m[i2];
+
+      if(normalMode){                                  // 法线着色：0.5·(N+1)
+        out[0]=(nx+1)*0.5; out[1]=(ny+1)*0.5; out[2]=(nz+1)*0.5;
+        return;
+      }
+
+      if(mt===3){                                     // 光源：唯一真正发光的地方
+        out[0] = ar*S.a[i2]; out[1] = ag*S.b[i2]; out[2] = ab*S.c[i2];
+        return;
+      }
+
+      /* 法线朝向规范化 */
+      if(dx*nx+dy*ny+dz*nz > 0){ nx=-nx; ny=-ny; nz=-nz; }
+
+      if(mt===0){                                     // Lambertian：余弦加权采样
+        randUnit();
+        var tx2 = hx+nx+_rx, ty2 = hy+ny+_ry, tz2 = hz+nz+_rz;
+        var l2 = Math.sqrt(tx2*tx2+ty2*ty2+tz2*tz2);
+        if(l2 < 1e-6) return;                          // 退化方向：直接终止（笔记 4 号陷阱）
+        dx = tx2/l2; dy = ty2/l2; dz = tz2/l2;
+        ox = hx + nx*1e-3; oy = hy + ny*1e-3; oz = hz + nz*1e-3;
+        ar *= S.a[i2]; ag *= S.b[i2]; ab *= S.c[i2];
+
+      } else if(mt===1){                              // Metal：反射 + fuzz
+        var dn = dx*nx+dy*ny+dz*nz;
+        var rx = dx-2*dn*nx, ry = dy-2*dn*ny, rz = dz-2*dn*nz;
+        if(S.fuzz[i2] > 0){
+          randUnit();
+          rx += S.fuzz[i2]*_rx; ry += S.fuzz[i2]*_ry; rz += S.fuzz[i2]*_rz;
+        }
+        var l3 = Math.sqrt(rx*rx+ry*ry+rz*rz);
+        if(l3 < 1e-6) return;
+        rx/=l3; ry/=l3; rz/=l3;
+        if(rx*nx+ry*ny+rz*nz <= 0) return;             // 反射进表面内部 → 吸收
+        dx=rx; dy=ry; dz=rz;
+        ox = hx + nx*1e-3; oy = hy + ny*1e-3; oz = hz + nz*1e-3;
+        ar *= S.a[i2]; ag *= S.b[i2]; ab *= S.c[i2];
+
+      } else {                                        // Dielectric：折射 + Schlick
+        var ior = S.ior[i2];
+        var front = (dx*nx+dy*ny+dz*nz) < 0;
+        // 此时 n 已与光线反向，front 恒为真；用几何外法线判断更稳
+        var gnx = (hx-S.x[i2])/S.r[i2], gny=(hy-S.y[i2])/S.r[i2], gnz=(hz-S.z[i2])/S.r[i2];
+        front = (dx*gnx+dy*gny+dz*gnz) < 0;
+        var etaRatio = front ? (1.0/ior) : ior;
+        var cosTheta = Math.min(-(dx*nx+dy*ny+dz*nz), 1.0);
+        var sinTheta = Math.sqrt(Math.max(0, 1-cosTheta*cosTheta));
+        var cannotRefract = etaRatio*sinTheta > 1.0;
+        var reflect = cannotRefract;
+        if(!cannotRefract){
+          var r0 = (1-ior)/(1+ior); r0 = r0*r0;
+          var refl = r0 + (1-r0)*Math.pow(1-cosTheta, 5);
+          if(refl > RNG()) reflect = true;
+        }
+        var ox2, oy2, oz2;
+        if(reflect){
+          var dn2 = dx*nx+dy*ny+dz*nz;
+          ox2 = dx-2*dn2*nx; oy2 = dy-2*dn2*ny; oz2 = dz-2*dn2*nz;
+        } else {
+          var ct = Math.min(-(dx*nx+dy*ny+dz*nz), 1.0);
+          var ppx = etaRatio*(dx + ct*nx), ppy = etaRatio*(dy + ct*ny), ppz = etaRatio*(dz + ct*nz);
+          var pl2 = ppx*ppx+ppy*ppy+ppz*ppz;
+          var par = -Math.sqrt(Math.abs(1-pl2));
+          ox2 = ppx + par*nx; oy2 = ppy + par*ny; oz2 = ppz + par*nz;
+        }
+        var l4 = Math.sqrt(ox2*ox2+oy2*oy2+oz2*oz2);
+        if(l4 < 1e-6) return;
+        dx=ox2/l4; dy=oy2/l4; dz=oz2/l4;
+        ox = hx + nx*1e-3; oy = hy + ny*1e-3; oz = hz + nz*1e-3;
+        // 玻璃不衰减（albedo = 1）
+      }
+    }
+    out[0]=0; out[1]=0; out[2]=0;                      // 深度耗尽 → 保险丝
+  }
+
+  var out3 = [0,0,0];
+  var cursor = 0, passes = 0, paused = false, tStart = 0, elapsed = 0;
+  var frameTime = 0, dirty = true;
+  var BLOCK = 192;
+
+  function samplePixel(idx, jitter){
+    var i = idx % LOW.W, j = (idx/LOW.W) | 0;
+    var du = jitter ? RNG() : 0.5;
+    var dv = jitter ? RNG() : 0.5;
+    var dx = CAM.px + (i+du)*CAM.dux + (j+dv)*CAM.dvx - CAM.ex;
+    var dy = CAM.py + (i+du)*CAM.duy + (j+dv)*CAM.dvy - CAM.ey;
+    var dz = CAM.pz + (i+du)*CAM.duz + (j+dv)*CAM.dvz - CAM.ez;
+    rayColor(CAM.ex, CAM.ey, CAM.ez, dx, dy, dz, out3);
+    var k3 = idx*3;
+    accum[k3] += out3[0]; accum[k3+1] += out3[1]; accum[k3+2] += out3[2];
+    cnt[idx]++;
+  }
+
+  function step(msBudget){
+    var t0 = performance.now();
+    var guard = 0;
+    while(performance.now() - t0 < msBudget && guard < 600){
+      var n = Math.min(BLOCK, LOW.W*LOW.H - cursor);
+      for(var k=0;k<n;k++){ samplePixel(cursor+k, aaOn); }
+      cursor += n;
+      if(cursor >= LOW.W*LOW.H){ cursor = 0; passes++; }
+      guard++;
+    }
+    frameTime = performance.now()-t0;
+    dirty = true;
+  }
+
+  function blit(){
+    if(!dirty || !buf) return;
+    var N = LOW.W*LOW.H;
+    for(var p=0;p<N;p++){
+      var cn = cnt[p];
+      var k = p*4, k3 = p*3;
+      if(cn === 0){
+        buf[k]=12; buf[k+1]=16; buf[k+2]=22; buf[k+3]=255;
+        continue;
+      }
+      var inv = 1/cn;
+      buf[k]   = clamp(Math.sqrt(clamp(accum[k3]*inv,0,1))*255, 0, 255);
+      buf[k+1] = clamp(Math.sqrt(clamp(accum[k3+1]*inv,0,1))*255, 0, 255);
+      buf[k+2] = clamp(Math.sqrt(clamp(accum[k3+2]*inv,0,1))*255, 0, 255);
+      buf[k+3] = 255;
+    }
+    octx.putImageData(img,0,0);
+    var f = fit(cv), ctx = f.ctx;
+    ctx.fillStyle='#0c1017'; ctx.fillRect(0,0,f.w,f.h);
+    ctx.imageSmoothingEnabled = true;
+    if(ctx.imageSmoothingQuality) ctx.imageSmoothingQuality='high';
+    ctx.drawImage(off, 0, 0, f.w, f.h);
+    dirty = false;
+  }
+
+  var aaOn = true;
+  function reset(){
+    if(!accum) alloc();
+    accum.fill(0); cnt.fill(0);
+    cursor = 0; passes = 0; tStart = performance.now(); elapsed = 0;
+    dirty = true;
+    blit();
+  }
+
+  function rebuild(){
+    /* 每个场景一套机位：材质对比是一排横陈的球，需要正视且视场更宽 */
+    CAM_CFG = (sceneSel === 'mats')
+      ? { eye:[7.5,2.0,0.2], look:[0,0.78,0], vfov:46 }
+      : { eye:[13,2.0,3.0],  look:[1.4,0.72,0], vfov:20 };
+    normalMode = (sceneSel === 'norm');
+    buildCam(LOW.W/LOW.H);
+    if(sceneSel === 'mats') buildMats();
+    else buildClassic();                     // norm 模式复用经典几何
+    reset();
+  }
+
+  var sceneSel = 'classic', normalMode = false;
+
+  /* ---------- 控件 ---------- */
+  if(seScene) seScene.addEventListener('change', function(){
+    sceneSel = this.value; rebuild();
+  });
+  if(seRes) seRes.addEventListener('change', function(){
+    var W = +this.value;
+    LOW = { W:W, H: Math.round(W/1.5) };
+    alloc(); rebuild();
+  });
+  if(seLight) seLight.addEventListener('change', function(){
+    lampOn = (this.value === 'lamp'); rebuild();
+  });
+  if(ckAA) ckAA.addEventListener('change', function(){ aaOn = this.checked; reset(); });
+  if(rgDepth) rgDepth.addEventListener('input', function(){
+    maxDepth = +this.value;
+    if(lbDepth) lbDepth.textContent = maxDepth;
+    reset();
+  });
+  if(btPause) btPause.addEventListener('click', function(){
+    paused = !paused;
+    this.textContent = paused ? '▶ 继续' : '⏸ 暂停';
+  });
+  if(btReset) btReset.addEventListener('click', reset);
+  if(btSave) btSave.addEventListener('click', function(){
+    var a = document.createElement('a');
+    a.download = 'pathtracer_'+LOW.W+'x'+LOW.H+'_'+passes+'pass.png';
+    a.href = off.toDataURL('image/png');
+    a.click();
+  });
+
+  alloc();
+  buildCam(LOW.W/LOW.H);
+  buildClassic();
+  reset();
+
+  /* ---------- 主循环 ---------- */
+  function frame(){
+    if(!paused && passes < 4000) step(24);
+    blit();
+    if(passes>0){
+      elapsed = (performance.now()-tStart)/1000;
+      if(oPass) oPass.textContent = passes;
+      if(oSpp) oSpp.textContent = passes;
+      if(oCur) oCur.textContent = Math.round(cursor/(LOW.W*LOW.H)*100)+'%';
+      if(oTime) oTime.textContent = elapsed.toFixed(1)+'s';
+      if(oSpeed){
+        var pps = passes/elapsed;
+        oSpeed.textContent = pps.toFixed(1)+' 轮/秒';
+      }
+      if(oNoise) oNoise.textContent = '1/√' + passes + ' ≈ ' + (100/Math.sqrt(passes)).toFixed(1) + '%';
+      if(lbStat){
+        lbStat.textContent = LOW.W+'×'+LOW.H+' · '+passes+' 轮 · '+
+          Math.round(cursor/(LOW.W*LOW.H)*100)+'% · 深度 '+maxDepth;
+      }
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+  onResize(function(){ blit(); });
+})();
+
+/* =====================================================================
+   §7  一条光线穿过金属球与玻璃球（2D 侧视剖面 · 逐段推进）
+   ===================================================================== */
+(function(){
+  var cv = $('#cv-path'), lb = $('#lb-path'), nowBox = $('#path-now'), ledgerEl = $('#path-ledger');
+  if(!cv) return;
+
+  var DEG = 180/Math.PI;
+  var SKY_Y = 7.0;                                    // 天光底边高度
+  var VX0 = -1.8, VX1 = 9.6, VY0 = 0.0, VY1 = 7.6;    // 视野矩形（世界坐标）
+
+  function dir(d){ return {x:Math.cos(d/DEG), y:Math.sin(d/DEG)}; }
+  function nrm(v){ var l=Math.hypot(v.x,v.y)||1; return {x:v.x/l, y:v.y/l}; }
+  function dot(a,b){ return a.x*b.x + a.y*b.y; }
+  function ang(v){ return Math.atan2(-v.y, v.x); }     // 世界向量 → 屏幕角（画布 y 朝下）
+  function f1(v){ return v.toFixed(2); }
+
+  /* ---------- 几何：解析反推 ----------
+     给定眼睛 E、相机射线角 α、眼睛到命中点距离 t、目标反射角 β：
+       反射定律等价于  D_out − D = −2(D·N)N  =>  N ∝ (D_out − D)，取 D·N<0 的那一支
+       球心 M = P1 − r·N（球面过 P1 且该处法线为 N 的球心必定落在这条线上）
+     玻璃球落位同理：沿反射光线偏垂向偏 o，则入场角 sinθ = o / r_glass，可直接指定。 */
+  var EYE = {x:0.70, y:4.40};
+  var ALPHA = -38, T_EYE = 2.70, BETA = 25;
+  var R_METAL = 1.00, R_GLASS = 1.20, IOR = 1.5;
+  var TH_GLASS_IN = 50, G_TARGET_X = 5.90;
+  var EPS = 1e-6;                                     // 自相交偏移，见下方 advance() 注释
+
+  var d0 = dir(ALPHA), RDIR = dir(BETA);
+  var P1 = {x: EYE.x + T_EYE*d0.x, y: EYE.y + T_EYE*d0.y};
+  var n1 = nrm({x: RDIR.x - d0.x, y: RDIR.y - d0.y});
+  if(dot(d0, n1) > 0){ n1 = {x:-n1.x, y:-n1.y}; }
+  var MC = {x: P1.x - R_METAL*n1.x, y: P1.y - R_METAL*n1.y};
+  var TH_MIRROR = Math.acos(Math.min(1, Math.abs(dot(d0, n1))))*DEG;
+
+  var perp = {x:-RDIR.y, y:RDIR.x};
+  var O_OFF = R_GLASS*Math.sin(TH_GLASS_IN/DEG);
+  var sG = (G_TARGET_X - P1.x + O_OFF*RDIR.y)/RDIR.x;
+  var GC = {x: P1.x + sG*RDIR.x + O_OFF*perp.x, y: P1.y + sG*RDIR.y + O_OFF*perp.y};
+
+  var METAL = {name:'金属球', type:'metal', c:MC, r:R_METAL};
+  var GLASS = {name:'玻璃球', type:'glass', c:GC, r:R_GLASS};
+
+  /* ---------- 求交与追踪 ---------- */
+  function hitSphere(o, p, d){
+    var ox = p.x-o.c.x, oy = p.y-o.c.y;
+    var a = d.x*d.x + d.y*d.y;
+    var h = d.x*(-ox) + d.y*(-oy);
+    var c = ox*ox + oy*oy - o.r*o.r;
+    var disc = h*h - a*c;
+    if(disc <= 1e-12) return null;
+    var sq = Math.sqrt(disc);
+    var t = (h-sq)/a; if(t <= 1e-9) t = (h+sq)/a; if(t <= 1e-9) return null;
+    var P = {x:p.x+t*d.x, y:p.y+t*d.y};
+    return {t:t, obj:o, P:P, n:{x:(P.x-o.c.x)/o.r, y:(P.y-o.c.y)/o.r}, inside:(c < 0)};
+  }
+  function hitNearest(objs, p, d){
+    var b = null;
+    for(var i=0;i<objs.length;i++){ var h = hitSphere(objs[i], p, d); if(h && (!b || h.t < b.t)) b = h; }
+    return b;
+  }
+  /* 完整 Fresnel（非偏振平均）。cosI = 入射角余弦，eta = n₁/n₂ */
+  function fresnel(cosI, eta){
+    var s2 = eta*eta*(1 - cosI*cosI);
+    if(s2 >= 1) return 1;                              // 全内反射
+    var cosT = Math.sqrt(1 - s2);
+    var rs = (cosI - eta*cosT)/(cosI + eta*cosT);
+    var rp = (eta*cosI - cosT)/(eta*cosI + cosT);
+    return (rs*rs + rp*rp)/2;
+  }
+
+  /* 推进到下一次追问：起点从交点沿新方向挪开 EPS。
+     不挪的话新起点正好落在球面上，判别式的近根 t≈0 会被 t>1e-9 挡掉，
+     于是取到「穿过整颗球之后的远根」——把「出射」判成「再次进入」，
+     一条本该 2 次命中的光线会被记成 8 次擦碰。这是标准的自相交问题。 */
+  function advance(hit, dOut){
+    return {p:{x:hit.P.x + dOut.x*EPS, y:hit.P.y + dOut.y*EPS}, d:dOut};
+  }
+
+  var TRACE = (function(){
+    var p = {x:EYE.x, y:EYE.y}, d = d0, segs = [], fres = [];
+    for(var k=0;k<8;k++){
+      var h = hitNearest([METAL, GLASS], p, d);
+      /* tSky 必须同时判「朝上」与「有限」。只写 tSky > 1e-9 会让 Infinity 通过，
+         把「朝下、什么也没打中」误判成「到达天光」，并算出 Infinity*d 的 NaN 坐标；
+         后面的「逃逸」分支也就永远执行不到。 */
+      var tSky = d.y > 1e-9 ? (SKY_Y - p.y)/d.y : Infinity;
+      if(isFinite(tSky) && tSky > 1e-9 && (!h || tSky < h.t)){
+        segs.push({kind:'到达天光', len:tSky, from:p, to:{x:p.x+tSky*d.x, y:p.y+tSky*d.y}, d:d});
+        break;
+      }
+      if(!h){ segs.push({kind:'逃逸', len:12, from:p, to:{x:p.x+12*d.x, y:p.y+12*d.y}, d:d, esc:true}); break; }
+      var n = h.n, dn = dot(d, n);
+      if(h.obj.type === 'metal'){
+        var dOutM = nrm({x: d.x - 2*dn*n.x, y: d.y - 2*dn*n.y});
+        segs.push({kind:'反射', obj:'金属球', len:h.t, from:p, to:h.P, d:d, dOut:dOutM, n:n,
+                   inc:Math.acos(Math.min(1, Math.abs(dn)))*DEG});
+        var adv = advance(h, dOutM); p = adv.p; d = adv.d;
+      } else {
+        var entering = !h.inside;
+        var nf = entering ? n : {x:-n.x, y:-n.y};
+        var cosi = -(d.x*nf.x + d.y*nf.y);
+        var eta = entering ? 1/IOR : IOR;
+        var Rf = fresnel(Math.min(1, Math.max(0, cosi)), eta);
+        var dRefl = nrm({x: d.x - 2*dn*n.x, y: d.y - 2*dn*n.y});
+        var kk = 1 - eta*eta*(1 - cosi*cosi);
+        var dOutG, kind;
+        if(kk < 0){ dOutG = dRefl; kind = '全内反射'; }
+        else {
+          var sqr = Math.sqrt(kk);
+          dOutG = nrm({x: eta*d.x + (eta*cosi - sqr)*nf.x, y: eta*d.y + (eta*cosi - sqr)*nf.y});
+          kind = entering ? '折射进入' : '折射出射';
+        }
+        segs.push({kind:kind, obj:'玻璃球', len:h.t, from:p, to:h.P, d:d, dOut:dOutG, n:n,
+                   inc:Math.acos(Math.min(1, Math.max(-1, cosi)))*DEG, Rf:Rf, entering:entering});
+        fres.push({at:h.P, dir:dRefl, R:Rf, surf:(entering ? '入场面' : '出场面')});
+        var adv2 = advance(h, dOutG); p = adv2.p; d = adv2.d;
+      }
+    }
+    return {segs:segs, fres:fres};
+  })();
+  var SEGS = TRACE.segs;
+
+  /* ---------- 时间轴 ----------
+     四段「行进」区间 + 六个账本条目的揭示时刻（与单步按钮的落点一一对应） */
+  var TRAVEL = [[0.00,0.20],[0.20,0.46],[0.46,0.66],[0.66,0.94]];
+  var STOPS  = [0.05, 0.20, 0.46, 0.55, 0.66, 0.94];
+
+  /* ---------- 账本数据（数字全部取自真实 trace） ---------- */
+  var sG_in = SEGS[1], sG_out = SEGS[2], CHORD = sG_out.len;
+  var LEDGER = [
+    { n:'①', t:'发射：相机射出一条光线', k:'', when:STOPS[0],
+      d:'起点 (' + f1(EYE.x) + ', ' + f1(EYE.y) + ')   方向 α = ' + ALPHA.toFixed(2) + '°' },
+    { n:'②', t:'反射：打在金属球上被弹开', k:'k-metal', when:STOPS[1],
+      d:'命中点 (' + f1(P1.x) + ', ' + f1(P1.y) + ')\n入射角 ' + TH_MIRROR.toFixed(2) + '° = 反射角 ' + TH_MIRROR.toFixed(2)
+        + '°   偏折 180° − 2×' + TH_MIRROR.toFixed(2) + '° = ' + (180-2*TH_MIRROR).toFixed(2) + '°' },
+    { n:'③', t:'折射进入：斜插进玻璃球', k:'k-glass', when:STOPS[2],
+      d:'入场点 (' + f1(sG_in.to.x) + ', ' + f1(sG_in.to.y) + ')\n1.0 × sin ' + sG_in.inc.toFixed(2) + '° = 1.5 × sin '
+        + sG_out.inc.toFixed(2) + '°   空气 → 玻璃 ior 1.5，光线向法线靠拢' },
+    { n:'④', t:'球内行进：沿弦穿过玻璃', k:'k-glass', when:STOPS[3],
+      d:'弦长 = 2r·cos θ₂ₜ = 2 × 1.20 × cos ' + sG_out.inc.toFixed(2) + '° = ' + CHORD.toFixed(3)
+        + '\n出场入射角 = 入场折射角 = ' + sG_out.inc.toFixed(2) + '°（弦两端的等腰三角形）' },
+    { n:'⑤', t:'折射出射：从玻璃背面穿出', k:'k-glass', when:STOPS[4],
+      d:'出场点 (' + f1(sG_out.to.x) + ', ' + f1(sG_out.to.y) + ')\n1.5 × sin ' + sG_out.inc.toFixed(2) + '° = 1.0 × sin '
+        + (SEGS[2].dOut ? (Math.acos(Math.min(1, Math.abs(dot(SEGS[2].dOut, SEGS[2].n))))*DEG).toFixed(2) : '—')
+        + '°   玻璃 → 空气，光线离开法线' },
+    { n:'⑥', t:'到达天光：这条光路结束', k:'k-sky', when:STOPS[5],
+      d:'终点 (' + f1(SEGS[3].to.x) + ', ' + f1(SEGS[3].to.y) + ')\n整条链：4 段 · 3 次表面交互（1 反射 + 2 折射）' }
+  ];
+
+  /* ---------- 每步讲解文案 ---------- */
+  var EVT = [
+    '<b>② 镜面反射 —— 入射角 = 反射角</b><br>命中点在金属球的<b>上表面</b>，法线朝上，' +
+      '所以斜射进来的光才可能被顶回右上方向。光线以 <b>' + TH_MIRROR.toFixed(2) + '°</b> 入射，就以 <b>'
+      + TH_MIRROR.toFixed(2) + '°</b> 弹开（都相对法线量）。<br>偏折量 = 180° − 2 × ' + TH_MIRROR.toFixed(2) + '° = <b>'
+      + (180-2*TH_MIRROR).toFixed(2) + '°</b>。<br>' +
+      '<span class="muted">D_out = D − 2(D·N)N。这个式子对球面上每个交点都成立，不需要知道球的半径。</span>',
+
+    '<b>③ 折射进入 —— Snell 定律第一次</b><br>从空气（n₁ = 1.0）以 <b>' + sG_in.inc.toFixed(2)
+      + '°</b> 入射，进入玻璃（n₂ = 1.5）后折射角变成 <b>' + sG_out.inc.toFixed(2)
+      + '°</b>——光线<b>向法线靠拢</b>。<br>1.0 × sin ' + sG_in.inc.toFixed(2) + '° = 1.5 × sin ' + sG_out.inc.toFixed(2)
+      + '°  →  ' + Math.sin(sG_in.inc/DEG).toFixed(4) + ' = ' + (1.5*Math.sin(sG_out.inc/DEG)).toFixed(4) + ' ✓<br>' +
+      '<span class="muted">折射光线与入射光线分居法线两侧——这是它和反射最直观的区别。</span>',
+
+    '<b>⑤ 折射出射 —— Snell 定律第二次</b><br>内壁入射角 <b>' + sG_out.inc.toFixed(2)
+      + '°</b>，恰好等于入场时的折射角。这不是巧合：弦的两个端点到球心距离都等于半径，' +
+      '「球心—入射点—出射点」构成<b>等腰三角形</b>，弦与两端法线夹角必然相等。<br>' +
+      '1.5 × sin ' + sG_out.inc.toFixed(2) + '° = 1.0 × sin ' + sG_in.inc.toFixed(2)
+      + '°  →  出射角回到 <b>' + sG_in.inc.toFixed(2) + '°</b>。<br>' +
+      '<span class="muted">' + sG_out.inc.toFixed(2) + '° 远小于临界角 ' + (Math.asin(1/IOR)*DEG).toFixed(2)
+      + '°，所以不可能全内反射，光线一定穿得出来。</span>',
+
+    '<b>⑥ 到达天光 —— 这条光路结束</b><br>光线打上背景，按天光亮度 L = 1.000 结算。<br>' +
+      '整条链：<b>4 段 · 3 次表面交互</b>（1 次反射 + 2 次折射）。<br>' +
+      '<span class="muted">在真实渲染器里，这一次交互的返回值还会逐层乘上各表面的系数再回传——那就是 §5 那本账。</span>'
+  ];
+
+  /* ---------- 状态 ---------- */
+  var prog = 0, playing = false;
+  var showNormal = true, showFresnel = false, showGrid = true;
+
+  var btPlay = $('#bt-path-play'), btStep = $('#bt-path-step'), btReset = $('#bt-path-reset');
+  var ckN = $('#ck-path-normal'), ckF = $('#ck-path-fresnel'), ckG = $('#ck-path-grid');
+
+  if(btPlay) btPlay.addEventListener('click', function(){
+    if(prog >= 0.999){ prog = 0; }
+    playing = !playing;
+    btPlay.textContent = playing ? '⏸ 暂停' : '▶ 播放';
+  });
+  if(btStep) btStep.addEventListener('click', function(){
+    playing = false; if(btPlay) btPlay.textContent = '▶ 播放';
+    for(var i=0;i<STOPS.length;i++){ if(prog < STOPS[i] - 1e-6){ prog = STOPS[i]; return; } }
+    prog = 1.0;
+  });
+  if(btReset) btReset.addEventListener('click', function(){
+    prog = 0; playing = false; if(btPlay) btPlay.textContent = '▶ 播放';
+  });
+  if(ckN) ckN.addEventListener('change', function(){ showNormal = ckN.checked; });
+  if(ckF) ckF.addEventListener('change', function(){ showFresnel = ckF.checked; });
+  if(ckG) ckG.addEventListener('change', function(){ showGrid = ckG.checked; });
+
+  function stateAt(p){
+    if(p <= 1e-6) return {mode:'idle', i:-1, f:0};
+    for(var i=0;i<4;i++){
+      if(p < TRAVEL[i][0]) return {mode:'done', i:i-1, f:1};
+      if(p < TRAVEL[i][1]) return {mode:'travel', i:i, f:(p-TRAVEL[i][0])/(TRAVEL[i][1]-TRAVEL[i][0])};
+    }
+    return {mode:'done', i:3, f:1};
+  }
+
+  /* ---------- 视图 ---------- */
+  function view(f){
+    var pad = 12;
+    var s = Math.min((f.w-2*pad)/(VX1-VX0), (f.h-2*pad)/(VY1-VY0));
+    var ox = (f.w - (VX1-VX0)*s)/2 - VX0*s;
+    var oy = (f.h - (VY1-VY0)*s)/2 + VY1*s;
+    return {s:s, X:function(x){return ox + x*s;}, Y:function(y){return oy - y*s;}};
+  }
+  function PX(V, q){ return {x:V.X(q.x), y:V.Y(q.y)}; }
+
+  /* ---------- 绘制 ---------- */
+  function stroke(ctx,V,a,b,col,lw,glow){
+    var A = PX(V,a), B = PX(V,b);
+    ctx.lineCap = 'round';
+    if(glow){ ctx.strokeStyle = glow; ctx.lineWidth = lw+6;
+      ctx.beginPath(); ctx.moveTo(A.x,A.y); ctx.lineTo(B.x,B.y); ctx.stroke(); }
+    ctx.strokeStyle = col; ctx.lineWidth = lw;
+    ctx.beginPath(); ctx.moveTo(A.x,A.y); ctx.lineTo(B.x,B.y); ctx.stroke();
+  }
+
+  function drawBall(ctx,V,C,r,kind){
+    var p = PX(V,C), R = r*V.s;
+    var g = ctx.createRadialGradient(p.x - R*0.34, p.y - R*0.38, R*0.05, p.x, p.y, R*1.02);
+    if(kind === 'metal'){
+      g.addColorStop(0,'#f4f7fb'); g.addColorStop(0.30,'#bfc7d4');
+      g.addColorStop(0.68,'#6d7787'); g.addColorStop(1,'#353c48');
+    } else {
+      g.addColorStop(0,'rgba(228,248,255,0.40)'); g.addColorStop(0.55,'rgba(150,215,238,0.17)');
+      g.addColorStop(0.88,'rgba(94,178,214,0.28)'); g.addColorStop(1,'rgba(126,204,236,0.50)');
+    }
+    ctx.beginPath(); ctx.arc(p.x, p.y, R, 0, Math.PI*2);
+    ctx.fillStyle = g; ctx.fill();
+    ctx.lineWidth = (kind === 'glass') ? 1.9 : 1.4;
+    ctx.strokeStyle = (kind === 'glass') ? 'rgba(170,226,248,0.88)' : 'rgba(230,238,250,0.62)';
+    ctx.stroke();
+    if(kind === 'glass'){
+      ctx.beginPath(); ctx.arc(p.x, p.y, R*0.60, 0, Math.PI*2);
+      ctx.strokeStyle = 'rgba(170,226,248,0.20)'; ctx.lineWidth = 1; ctx.stroke();
+    }
+    ctx.beginPath(); ctx.arc(p.x - R*0.34, p.y - R*0.38, R*0.15, 0, Math.PI*2);
+    ctx.fillStyle = (kind === 'glass') ? 'rgba(255,255,255,0.50)' : 'rgba(255,255,255,0.88)';
+    ctx.fill();
+  }
+
+  function drawEye(ctx,V){
+    var p = PX(V,EYE);
+    var g = ctx.createRadialGradient(p.x,p.y,1,p.x,p.y,13);
+    g.addColorStop(0,'rgba(124,120,255,0.55)'); g.addColorStop(1,'rgba(124,120,255,0)');
+    ctx.beginPath(); ctx.arc(p.x,p.y,13,0,Math.PI*2); ctx.fillStyle = g; ctx.fill();
+    ctx.beginPath(); ctx.arc(p.x,p.y,7,0,Math.PI*2); ctx.fillStyle = '#7c78ff'; ctx.fill();
+    ctx.lineWidth = 1.6; ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.stroke();
+    ctx.beginPath(); ctx.arc(p.x,p.y,2.5,0,Math.PI*2); ctx.fillStyle = '#0c1017'; ctx.fill();
+    ctx.fillStyle = 'rgba(180,176,255,0.92)';
+    ctx.font = '600 12px ui-monospace,Consolas,monospace'; ctx.textAlign = 'center';
+    ctx.fillText('相机', p.x, p.y - 16);
+    reserve(ctx, p.x, p.y - 16, '相机', 'center');
+    ctx.fillStyle = 'rgba(160,170,200,0.72)';
+    ctx.font = '500 11px ui-monospace,Consolas,monospace';
+    ctx.fillText('α = ' + ALPHA.toFixed(1) + '°', p.x, p.y + 22);
+    reserve(ctx, p.x, p.y + 22, 'α = ' + ALPHA.toFixed(1) + '°', 'center');
+  }
+
+  /* 画一条从 c 出发、方向 u、长约 L 的虚线法线 */
+  function normalLine(ctx,V,c,u,L){
+    var a = {x:c.x - u.x*L*0.55, y:c.y - u.y*L*0.55};
+    var b = {x:c.x + u.x*L, y:c.y + u.y*L};
+    var A = PX(V,a), B = PX(V,b), C = PX(V,c);
+    ctx.save();
+    ctx.setLineDash([5,4]);
+    ctx.strokeStyle = 'rgba(150,220,255,0.55)'; ctx.lineWidth = 1.3;
+    ctx.beginPath(); ctx.moveTo(A.x,A.y); ctx.lineTo(B.x,B.y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(150,220,255,0.85)';
+    ctx.beginPath(); ctx.arc(B.x,B.y,2.6,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle = 'rgba(150,220,255,0.95)';
+    ctx.font = '600 10.5px ui-monospace,Consolas,monospace'; ctx.textAlign='left';
+    ctx.fillText('N', B.x + 5, B.y + 3);
+    ctx.restore();
+    return C;
+  }
+
+  /* 带暗底的小标签：叠在球体或光线之上也读得清 */
+  /* 本帧已占位的标签矩形。折射进入与折射出射的两个「球内角」标注天然会挤在
+     弦的中段，固定偏移一定会撞在一起，所以这里让 chip 自己找位置：
+     先试自然位置，再按上→下→更远→左右依次让位，取第一个不重叠的位置。 */
+  var _placed = [];
+  var CW = 0, CH = 0;                           // 本帧画布尺寸，用于把标签挡在画面内
+  function chipReset(){ _placed.length = 0; }
+
+  /* 只占位、不绘制：把球名、天光带这类既存文字也算进避让区 */
+  function reserve(ctx, x, y, text, align){
+    ctx.font = '600 11.5px ui-monospace,Consolas,monospace';
+    var tw = ctx.measureText(text).width;
+    var x0 = (align === 'right') ? x - tw : (align === 'center' ? x - tw/2 : x - 5);
+    _placed.push({x:x0, y:y-11.5, w:tw + (align === 'center' ? 0 : 10), h:16});
+  }
+
+  function chip(ctx, x, y, text, col, align){
+    ctx.font = '600 11.5px ui-monospace,Consolas,monospace';
+    var tw = ctx.measureText(text).width, pad = 5, h = 16, w = tw + pad*2;
+    var dx = w + 6, dy = h + 4;
+    var cand = [[0,0],[0,-dy],[0,dy],[0,-2*dy],[0,2*dy],
+                [dx,0],[-dx,0],[dx,-dy],[-dx,-dy],[-dx,dy],[dx,dy],
+                [0,-3*dy],[0,3*dy]];
+    /* 候选位逐个试。判据是「与已占位标签至少隔开 MG 像素」，不是「不重叠」——
+       两个暗底标签只差 1~2px 时在深色画布上会糊成一团，看起来就是一段叠字，
+       而「不重叠」判定会放它过去。13 个候选全不合格时取重叠最轻的那个，
+       而不是退回原始位置：原始位置恰恰是最容易压字的地方，退回去等于放弃避让。 */
+    var MG = 3;
+    var rect = null, baseY = y, bestOver = Infinity, bestRect = null, bestY = y;
+    for(var k=0; k<cand.length; k++){
+      var ax = x + cand[k][0], ay = y + cand[k][1];
+      var x0 = (align === 'right') ? ax - w + pad : (align === 'center' ? ax - w/2 : ax - pad);
+      var r = {x:x0, y:ay - 11.5, w:w, h:h};
+      if(CW && CH && (r.x < 3 || r.y < 3 || r.x + r.w > CW-3 || r.y + r.h > CH-3)) continue;
+      var over = 0;
+      for(var j=0; j<_placed.length; j++){
+        var o = _placed[j];
+        var gapX = Math.max(o.x - (r.x + r.w), r.x - (o.x + o.w));
+        var gapY = Math.max(o.y - (r.y + r.h), r.y - (o.y + o.h));
+        if(gapX < MG && gapY < MG){
+          var ox = Math.min(r.x+r.w, o.x+o.w) - Math.max(r.x, o.x);
+          var oy = Math.min(r.y+r.h, o.y+o.h) - Math.max(r.y, o.y);
+          over += (ox > 0 && oy > 0) ? (100 + ox*oy) : 1;   // 真重叠重罚，只是挨太近轻罚
+        }
+      }
+      if(over < bestOver){ bestOver = over; bestRect = r; bestY = ay; }
+      if(over === 0){ rect = r; baseY = ay; break; }
+    }
+    if(!rect){ rect = bestRect || {x:x - pad, y:y - 11.5, w:w, h:h}; baseY = bestY; }
+    _placed.push(rect);
+    ctx.fillStyle = 'rgba(9,12,18,0.86)';
+    ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+    ctx.fillStyle = col;
+    ctx.textAlign = 'left';
+    ctx.fillText(text, rect.x + pad, baseY);
+  }
+
+  /* 角度弧：从向量 a 到向量 b 的短弧 + 标注 */
+  function angleArc(ctx,V,c,a,b,rad,col,label){
+    var A = ang(a), B = ang(b), d = B - A;
+    while(d > Math.PI) d -= Math.PI*2;
+    while(d < -Math.PI) d += Math.PI*2;
+    var C = PX(V,c), R = rad*V.s;
+    ctx.beginPath(); ctx.arc(C.x, C.y, R, A, A+d, d < 0);
+    ctx.strokeStyle = col; ctx.lineWidth = 1.6; ctx.stroke();
+    var mid = A + d/2;
+    chip(ctx, C.x + Math.cos(mid)*(R+18), C.y + Math.sin(mid)*(R+18) + 4, label, col, 'center');
+  }
+
+  function draw(){
+    var f = fit(cv), ctx = f.ctx, W = f.w, H = f.h, V = view(f);
+    var ST = stateAt(prog);
+
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle = '#0c1017'; ctx.fillRect(0,0,W,H);
+    chipReset();                                  // 每帧重新开始标签避让
+    CW = W; CH = H;
+
+    /* 网格 */
+    if(showGrid){
+      ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth = 1;
+      for(var gx=0; gx<=Math.ceil(VX1); gx++){
+        var X = V.X(gx);
+        ctx.beginPath(); ctx.moveTo(X, V.Y(VY0)); ctx.lineTo(X, V.Y(VY1)); ctx.stroke();
+      }
+      for(var gy=0; gy<=Math.ceil(VY1); gy++){
+        var Y = V.Y(gy);
+        ctx.beginPath(); ctx.moveTo(V.X(VX0), Y); ctx.lineTo(V.X(VX1), Y); ctx.stroke();
+      }
+      ctx.fillStyle = 'rgba(150,160,190,0.34)';
+      ctx.font = '500 10px ui-monospace,Consolas,monospace'; ctx.textAlign='center';
+      for(var t=0; t<=8; t+=2) ctx.fillText(String(t), V.X(t), V.Y(VY0)+13);
+      ctx.textAlign='right';
+      for(var u=2; u<=6; u+=2) ctx.fillText(String(u), V.X(VX0)-5, V.Y(u)+3);
+    }
+
+    /* 天光横带（铺满画布宽度，超出世界矩形也无妨） */
+    var yS = V.Y(SKY_Y);
+    var gr = ctx.createLinearGradient(0,0,0,yS);
+    gr.addColorStop(0,'rgba(152,192,242,0.36)'); gr.addColorStop(1,'rgba(92,142,206,0.09)');
+    ctx.fillStyle = gr; ctx.fillRect(0,0,W,yS);
+    ctx.strokeStyle = 'rgba(162,202,246,0.55)'; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(0,yS); ctx.lineTo(W,yS); ctx.stroke();
+    ctx.fillStyle = 'rgba(184,216,250,0.78)';
+    ctx.font = '600 11.5px ui-monospace,Consolas,monospace'; ctx.textAlign='left';
+    ctx.fillText('天光 / 背景   L = 1.000', 14, yS - 10);
+    reserve(ctx, 14, yS - 10, '天光 / 背景   L = 1.000', 'left');
+
+    /* 物体 */
+    drawBall(ctx,V,MC,R_METAL,'metal');
+    drawBall(ctx,V,GC,R_GLASS,'glass');
+    drawEye(ctx,V);
+
+    /* 球名标签分两步：这里先「占位」，让后面的角度标签避开它；
+       真正落字推迟到光线画完之后，否则出射光线会从字面上压过去。 */
+    var mLabel = '金属球  Metal   r = 1.00';
+    var gLabel = '玻璃球  Dielectric   ior = 1.5';
+    var mPos = {x: V.X(MC.x), y: V.Y(MC.y - R_METAL) + 15};
+    /* 注意：世界坐标 y 向上，所以「球顶」是 GC.y + R_GLASS，不是 GC.y − R_GLASS */
+    var gPos = {x: V.X(GC.x), y: V.Y(GC.y + R_GLASS) - 10};
+    reserve(ctx, mPos.x, mPos.y, mLabel, 'center');
+    reserve(ctx, gPos.x, gPos.y, gLabel, 'center');
+
+    /* 光路：逐段推进 */
+    var SEGCOL = ['#e7ecf7', '#ffd666', '#7fe3ff', '#ffd666'];
+    var SEGGLOW = ['rgba(231,236,247,0.13)', 'rgba(255,214,102,0.16)', 'rgba(127,227,255,0.18)', 'rgba(255,214,102,0.16)'];
+    var tip = null;
+    for(var i=0;i<SEGS.length && i<4;i++){
+      var sg = SEGS[i];
+      var frac = (ST.mode === 'idle') ? 0
+               : (ST.mode === 'done') ? 1
+               : (i < ST.i) ? 1 : (i === ST.i ? ST.f : 0);
+      if(frac <= 0) break;
+      var end = {x: sg.from.x + (sg.to.x-sg.from.x)*frac, y: sg.from.y + (sg.to.y-sg.from.y)*frac};
+      stroke(ctx,V,sg.from,end,SEGCOL[i],2.8,SEGGLOW[i]);
+      if(frac < 1) tip = end;
+    }
+
+    /* Fresnel 反射分支 */
+    if(showFresnel){
+      for(var q=0;q<TRACE.fres.length;q++){
+        var fr = TRACE.fres[q];
+        var reach = 1.55;
+        var e = {x: fr.at.x + fr.dir.x*reach, y: fr.at.y + fr.dir.y*reach};
+        ctx.save();
+        ctx.setLineDash([6,5]);
+        stroke(ctx,V,fr.at,e,'rgba(255,180,120,' + (0.30 + 0.55*fr.R*6).toFixed(2) + ')',1.6,null);
+        ctx.setLineDash([]);
+        var E = PX(V,e);
+        ctx.fillStyle = 'rgba(255,196,140,0.92)';
+        ctx.font = '600 10.5px ui-monospace,Consolas,monospace'; ctx.textAlign='left';
+        ctx.fillText('≈' + (fr.R*100).toFixed(1) + '% 反射（' + fr.surf + '）', E.x + 4, E.y + 3);
+        ctx.restore();
+      }
+    }
+
+    /* 顶点与法线、角度弧 */
+    var VERT = ['②反射', '③折射进入', '⑤折射出射', '⑥天光'];
+    var VCOL = ['#ffd666', '#7fe3ff', '#7fe3ff', '#ffd666'];
+    for(var v=0; v<3; v++){
+      var s = SEGS[v];
+      if(!s) continue;
+      var shown = (ST.mode === 'idle') ? false
+                : (ST.mode === 'done') ? true
+                : (v < ST.i) ? true : (v === ST.i ? ST.f >= 0.999 : false);
+      if(!shown) continue;
+      var pv = PX(V, s.to);
+
+      /* 法线 */
+      if(showNormal && s.n){
+        normalLine(ctx,V,s.to,s.n,1.45);
+      }
+
+      /* 角度弧 */
+      if(s.d && s.dOut && s.n){
+        var aIn = {x:-s.d.x, y:-s.d.y}, aOut = s.dOut;
+        var mIn = (dot(aIn, s.n) >= 0) ? s.n : {x:-s.n.x, y:-s.n.y};
+        var mOut = (dot(aOut, s.n) >= 0) ? s.n : {x:-s.n.x, y:-s.n.y};
+        if(s.kind === '反射'){
+          angleArc(ctx,V,s.to,aIn,mIn,0.60,'#9fe8b0', s.inc.toFixed(1) + '°');
+          angleArc(ctx,V,s.to,mOut,aOut,0.60,'#9fe8b0', s.inc.toFixed(1) + '°');
+        } else if(s.kind === '折射进入'){
+          var thT = Math.asin(Math.min(1, Math.sin(s.inc/DEG)/IOR))*DEG;
+          angleArc(ctx,V,s.to,aIn,mIn,0.60,'#9fe8b0', s.inc.toFixed(2) + '°');
+          angleArc(ctx,V,s.to,mOut,aOut,0.74,'#ffb08a', thT.toFixed(2) + '°');
+        } else {
+          var thOut = Math.acos(Math.min(1, Math.abs(dot(s.dOut, s.n))))*DEG;
+          angleArc(ctx,V,s.to,aIn,mIn,0.60,'#ffb08a', s.inc.toFixed(2) + '°');
+          angleArc(ctx,V,s.to,mOut,aOut,0.74,'#9fe8b0', thOut.toFixed(2) + '°');
+        }
+      }
+
+      /* 顶点圆点 */
+      ctx.beginPath(); ctx.arc(pv.x,pv.y,4.4,0,Math.PI*2);
+      ctx.fillStyle = VCOL[v]; ctx.fill();
+      ctx.lineWidth = 1.4; ctx.strokeStyle = 'rgba(12,16,23,0.85)'; ctx.stroke();
+
+      /* 顶点标签：沿「球心 → 命中点」的朝外方向推开，
+         这样标签永远落在球的轮廓之外，不会压在球面或角度弧上。
+         世界坐标 y 向上、画布 y 向下，所以画布偏移量取 −uy。 */
+      var host = (v === 0) ? MC : GC;              // 该顶点所属的球
+      var ux = s.to.x - host.x, uy = s.to.y - host.y;
+      var ul = Math.sqrt(ux*ux + uy*uy) || 1;
+      ux /= ul; uy /= ul;
+      chip(ctx, pv.x + ux*17, pv.y - uy*17, VERT[v], VCOL[v], ux >= 0 ? 'left' : 'right');
+    }
+
+    /* 球名标签：等光线画完再落字，避免被出射光压过 */
+    ctx.font = '600 11.5px ui-monospace,Consolas,monospace'; ctx.textAlign='center';
+    ctx.fillStyle = 'rgba(206,212,226,0.85)';
+    ctx.fillText(mLabel, mPos.x, mPos.y);
+    ctx.fillStyle = 'rgba(178,224,246,0.92)';
+    ctx.fillText(gLabel, gPos.x, gPos.y);
+
+    /* 领头的光子点 */
+    if(tip){
+      var tp = PX(V,tip);
+      var gg = ctx.createRadialGradient(tp.x,tp.y,0,tp.x,tp.y,11);
+      gg.addColorStop(0,'rgba(255,255,255,0.95)'); gg.addColorStop(1,'rgba(255,214,102,0)');
+      ctx.beginPath(); ctx.arc(tp.x,tp.y,11,0,Math.PI*2); ctx.fillStyle = gg; ctx.fill();
+      ctx.beginPath(); ctx.arc(tp.x,tp.y,3.2,0,Math.PI*2); ctx.fillStyle = '#fff'; ctx.fill();
+    }
+
+    updatePanels(ST);
+  }
+
+  /* ---------- 面板 ---------- */
+  var _lastKey = '';
+  function updatePanels(ST){
+    var key = ST.mode + '|' + ST.i + '|' + (ST.mode === 'travel' ? Math.round(ST.f*10) : '') + '|' + (prog >= 1 ? 1 : 0);
+    var doneVertex = (ST.mode === 'travel') ? ST.i - 1 : ST.i;
+
+    if(lb){
+      /* 末段终点 = TRAVEL[3][1] = 0.94；一旦走到这里，四段光路就都画完了，
+         状态栏应立即报「完成」，而不是等到尾部留白走完的 1.0。 */
+      lb.textContent = ST.mode === 'idle' ? '等待发射'
+        : (prog >= TRAVEL[3][1] - 1e-6) ? '完成：' + SEGS.length + ' 段 · ' + (SEGS.length-1) + ' 次交互'
+        : (ST.mode === 'travel' ? '进行中 · 第 ' + (ST.i+1) + ' / ' + SEGS.length + ' 段'
+                                : '已到达第 ' + (doneVertex+1) + ' 个节点');
+    }
+
+    if(rowEls.length){
+      for(var i=0;i<rowEls.length;i++){
+        var on = (prog >= LEDGER[i].when - 1e-9);
+        rowEls[i].row.className = 'row ' + LEDGER[i].k + (on ? ' on' : '');
+      }
+    }
+
+    if(nowBox && key !== _lastKey){
+      _lastKey = key;
+      if(ST.mode === 'idle'){
+        nowBox.innerHTML = '<b>等待发射。</b><br>按「▶ 播放」看整条光路一段段长出来，或按「⏭ 单步」一次推进一步。';
+      } else if(doneVertex < 0){
+        nowBox.innerHTML = '<b>① 发射中</b><br>相机从 (' + f1(EYE.x) + ', ' + f1(EYE.y) + ') 沿 α = '
+          + ALPHA.toFixed(2) + '° 射出一条光线，正在飞向金属球。<br><span class="muted">这一段长 '
+          + SEGS[0].len.toFixed(3) + '，终点是球面上的一点——不是球心。</span>';
+      } else {
+        var base = EVT[Math.min(doneVertex, 3)];
+        if(ST.mode === 'travel'){
+          var mid = ['<b>② 反射完成，正在飞向玻璃球</b>', '<b>③ 已进入玻璃，正在球内沿弦前进</b>',
+                     '<b>⑤ 已穿出玻璃，正在飞向天光</b>', ''][ST.i];
+          if(mid) base += '<div class="note t" style="margin:10px 0 0;padding:8px 12px 8px 38px">' + mid + '</div>';
+        }
+        nowBox.innerHTML = base;
+      }
+    }
+
+    /* 读数：按已完成节点逐步填出 */
+    function set(id, v){ var e = $('#o-'+id); if(e) e.textContent = v; }
+    var okM = ST.mode === 'done' ? ST.i >= 0 : ST.i >= 1 || (ST.mode === 'travel' && ST.i === 1);
+    var okG = ST.mode === 'done' ? ST.i >= 1 : ST.i >= 2;
+    var okO = ST.mode === 'done' ? ST.i >= 2 : ST.i >= 3;
+    set('mth', (ST.mode === 'idle') ? '—' : TH_MIRROR.toFixed(2) + '°');
+    set('mtr', (ST.mode === 'idle') ? '—' : TH_MIRROR.toFixed(2) + '°');
+    set('mtd', (ST.mode === 'idle') ? '—' : (180-2*TH_MIRROR).toFixed(2) + '°');
+    set('gin', okG ? sG_in.inc.toFixed(2) + '° → ' + sG_out.inc.toFixed(2) + '°' : '—');
+    set('gout', okO ? sG_out.inc.toFixed(2) + '° → ' + (Math.acos(Math.min(1,Math.abs(dot(SEGS[2].dOut, SEGS[2].n))))*DEG).toFixed(2) + '°' : '—');
+    set('chord', okG ? CHORD.toFixed(3) : '—');
+  }
+
+  /* ---------- 账本 DOM ---------- */
+  var rowEls = [];
+  if(ledgerEl){
+    for(var li=0; li<LEDGER.length; li++){
+      var rw = LEDGER[li];
+      var row = document.createElement('div'); row.className = 'row ' + rw.k;
+      var nEl = document.createElement('div'); nEl.className = 'n'; nEl.textContent = rw.n;
+      var wEl = document.createElement('div');
+      var tEl = document.createElement('div'); tEl.className = 't'; tEl.textContent = rw.t;
+      var dEl = document.createElement('div'); dEl.className = 'd'; dEl.textContent = rw.d;
+      wEl.appendChild(tEl); wEl.appendChild(dEl);
+      row.appendChild(nEl); row.appendChild(wEl);
+      ledgerEl.appendChild(row);
+      rowEls.push({ row:row, d:dEl });
+    }
+  }
+
+  /* ---------- 主循环 ---------- */
+  var last = 0;
+  function loop(ts){
+    if(!last) last = ts;
+    var dt = ts - last; last = ts;
+    if(dt > 120) dt = 120;
+    if(playing){
+      prog += dt/5200;
+      if(prog >= 1.0){ prog = 1.0; playing = false; if(btPlay) btPlay.textContent = '▶ 播放'; }
+    }
+    draw();
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+  onResize(draw);
+})();
+
+/* =====================================================================
+   §8  一条光线会被弹几次（命中次数 = 递归深度）
+   ------------------------------------------------------------------
+   与 §7 共用同一套几何（眼位、两球位置、材质），只改两件事：
+     ① 发射方向 α   ② 弹射预算 maxDepth
+   于是同一个场景里，「问几次」这个递归结构就变成了可以直接对比的东西。
+   ===================================================================== */
+(function(){
+  var cv = $('#cv-count'), cvCone = $('#cv-cone');
+  if(!cv || !cvCone) return;
+  var lb = $('#lb-cnt'), spansEl = $('#count-spans'), nowBox = $('#count-now');
+  var ledgerEl = $('#count-ledger'), capEl = $('#count-cap');
+
+  var DEG = 180/Math.PI;
+  var SKY_Y = 7.0;
+  var VX0 = -1.8, VX1 = 9.6, VY0 = 0.0, VY1 = 7.6;    // 与 §7 同一视野矩形
+  var EPS = 1e-6, ESC_LEN = 9;
+  var A0 = -90, A1 = 90;                              // 扫描范围：朝前的半圈
+
+  function dir(d){ return {x:Math.cos(d/DEG), y:Math.sin(d/DEG)}; }
+  function nrm(v){ var l=Math.hypot(v.x,v.y)||1; return {x:v.x/l, y:v.y/l}; }
+  function dot(a,b){ return a.x*b.x + a.y*b.y; }
+  function ang(v){ return Math.atan2(-v.y, v.x); }
+  function f2(v){ return v.toFixed(2); }
+
+  /* ---------- 几何：与 §7 逐字一致（改一处必须同步另一处） ---------- */
+  var EYE = {x:0.70, y:4.40};
+  var R_METAL = 1.00, R_GLASS = 1.20, IOR = 1.5;
+  var A_EYE = -38, T_EYE = 2.70, BETA = 25, TH_GLASS_IN = 50, G_TARGET_X = 5.90;
+
+  var d0 = dir(A_EYE), RDIR = dir(BETA);
+  var P1 = {x: EYE.x + T_EYE*d0.x, y: EYE.y + T_EYE*d0.y};
+  var n1 = nrm({x: RDIR.x - d0.x, y: RDIR.y - d0.y});
+  if(dot(d0, n1) > 0){ n1 = {x:-n1.x, y:-n1.y}; }
+  var MC = {x: P1.x - R_METAL*n1.x, y: P1.y - R_METAL*n1.y};
+  var perp = {x:-RDIR.y, y:RDIR.x};
+  var O_OFF = R_GLASS*Math.sin(TH_GLASS_IN/DEG);
+  var sG = (G_TARGET_X - P1.x + O_OFF*RDIR.y)/RDIR.x;
+  var GC = {x: P1.x + sG*RDIR.x + O_OFF*perp.x, y: P1.y + sG*RDIR.y + O_OFF*perp.y};
+
+  var METAL = {name:'金属球', type:'metal', c:MC, r:R_METAL};
+  var GLASS = {name:'玻璃球', type:'glass', c:GC, r:R_GLASS};
+
+  /* ---------- 切线方向 ----------
+     从眼睛看，一颗球占住的方向范围恰好是 asin(r/D)（盲锥的补集）。
+     这个半角就是扫描带上那四条竖虚线的来历，也是「命中次数」分段的第一层边界。 */
+  var D_M = Math.hypot(MC.x-EYE.x, MC.y-EYE.y), A_M = Math.atan2(MC.y-EYE.y, MC.x-EYE.x)*DEG;
+  var D_G = Math.hypot(GC.x-EYE.x, GC.y-EYE.y), A_G = Math.atan2(GC.y-EYE.y, GC.x-EYE.x)*DEG;
+  var HLF_M = Math.asin(R_METAL/D_M)*DEG, HLF_G = Math.asin(R_GLASS/D_G)*DEG;
+  var TAN_M = {lo:A_M-HLF_M, hi:A_M+HLF_M};
+  var TAN_G = {lo:A_G-HLF_G, hi:A_G+HLF_G};
+
+  /* ---------- 求交 ---------- */
+  function hitSphere(o, p, d){
+    var ox = p.x-o.c.x, oy = p.y-o.c.y;
+    var a = d.x*d.x + d.y*d.y;
+    var h = d.x*(-ox) + d.y*(-oy);
+    var c = ox*ox + oy*oy - o.r*o.r;
+    var disc = h*h - a*c;
+    if(disc <= 1e-12) return null;
+    var sq = Math.sqrt(disc);
+    var t = (h-sq)/a; if(t <= 1e-9) t = (h+sq)/a; if(t <= 1e-9) return null;
+    var P = {x:p.x+t*d.x, y:p.y+t*d.y};
+    return {t:t, obj:o, P:P, n:{x:(P.x-o.c.x)/o.r, y:(P.y-o.c.y)/o.r}, inside:(c < 0)};
+  }
+  function hitNearest(objs, p, d){
+    var b = null;
+    for(var i=0;i<objs.length;i++){ var h = hitSphere(objs[i], p, d); if(h && (!b || h.t < b.t)) b = h; }
+    return b;
+  }
+  function fresnel(cosI, eta){
+    var s2 = eta*eta*(1 - cosI*cosI);
+    if(s2 >= 1) return 1;
+    var cosT = Math.sqrt(1 - s2);
+    var rs = (cosI - eta*cosT)/(cosI + eta*cosT);
+    var rp = (eta*cosI - cosT)/(eta*cosI + cosT);
+    return (rs*rs + rp*rp)/2;
+  }
+
+  /* ---------- 一次交互：命中 + 从该点能走的全部分支 ----------
+     这是本节的物理内核，trace() 与 buildTree() 共用它 —— 两套实现各算各的，
+     迟早会在某处对不上，而那种不一致正是最难看出来的 bug。
+     金属：理想镜面，只有一条分支（反射），方向唯一。
+     玻璃：Fresnel 把光分成两条 —— 反射 R、折射 1−R。
+     两条都记「命中 1 次」：命中发生在分支之前，分支决定的是「接下来从哪儿出发」，
+     而不是「这次算不算命中」。所以「命中次数」和「走哪条路」是两件事。 */
+  function interact(p, d){
+    var h = hitNearest([METAL, GLASS], p, d);
+    /* tSky 必须同时判「朝上」与「有限」：只写 tSky > 1e-9 会让 Infinity 通过，
+       把「朝下、什么也没打中」误判成「到达天光」，并算出 Infinity*d 的 NaN 坐标。 */
+    var tSky = (d.y > 1e-9) ? (SKY_Y - p.y)/d.y : Infinity;
+    if(isFinite(tSky) && tSky > 1e-9 && (!h || tSky < h.t)){
+      return {leaf:true, term:'射向天空', to:{x:p.x+tSky*d.x, y:p.y+tSky*d.y}, len:tSky, d:d};
+    }
+    if(!h){
+      return {leaf:true, term:'逃出场景', to:{x:p.x+ESC_LEN*d.x, y:p.y+ESC_LEN*d.y}, len:ESC_LEN, d:d};
+    }
+    var n = h.n, dn = dot(d, n);
+    if(h.obj.type === 'metal'){
+      return {hit:h, R:1, inc:Math.acos(Math.min(1, Math.abs(dn)))*DEG, surf:'镜面',
+              branches:[{kind:'反射', obj:'金属球', refl:false, surf:'镜面',
+                         dOut:nrm({x: d.x - 2*dn*n.x, y: d.y - 2*dn*n.y}),
+                         inc:Math.acos(Math.min(1, Math.abs(dn)))*DEG,
+                         refr:Math.acos(Math.min(1, Math.abs(dn)))*DEG, R:1}]};
+    }
+    var entering = !h.inside;
+    var nf = entering ? n : {x:-n.x, y:-n.y};
+    var cosi = Math.min(1, Math.max(0, -(d.x*nf.x + d.y*nf.y)));
+    var eta = entering ? 1/IOR : IOR;
+    var R = fresnel(cosi, eta);
+    var inc = Math.acos(cosi)*DEG;
+    var refr = Math.asin(Math.min(1, Math.abs(Math.sin(inc/DEG) * (entering ? 1/IOR : IOR))))*DEG;
+    var kk = 1 - eta*eta*(1 - cosi*cosi);
+    var dRefl = nrm({x: d.x - 2*dn*n.x, y: d.y - 2*dn*n.y});
+    var surf = entering ? '入场面' : '出场面';
+    var out = [];
+    /* 折射支。kk<0（全内反射）在「光从外部射入球」的场景下不可达 ——
+       球内走的是弦，弦两端到球心等距，内壁入射角恒等于入场折射角，
+       而它 ≤ asin(1/n) = 41.81°，永远到不了临界角。判据留着只为数值稳健。 */
+    if(kk >= 0){
+      var sqr = Math.sqrt(kk);
+      out.push({kind:(entering?'折射进入':'折射出射'), obj:'玻璃球', refl:false, surf:surf,
+                entering:entering,
+                dOut:nrm({x: eta*d.x + (eta*cosi - sqr)*nf.x, y: eta*d.y + (eta*cosi - sqr)*nf.y}),
+                inc:inc, refr:refr, R:1-R});
+    }
+    /* 反射支：§7 完全没画、§8 原先也漏掉的那一半。不透明窗口不存在「分支」，
+       玻璃才有；而恰恰是它决定了玻璃轮廓边缘那圈亮边。 */
+    out.push({kind:'玻璃表面反射', obj:'玻璃球', refl:true, surf:surf, entering:entering,
+              dOut:dRefl, inc:inc, refr:inc, R:R});
+    return {hit:h, R:R, inc:inc, surf:surf, entering:entering, branches:out};
+  }
+
+  /* 把一次交互的分支铺成一段画得出来的线段 */
+  function mkSeg(it, b, p, d, hitsAt){
+    return {kind:b.kind, obj:b.obj, refl:!!b.refl, surf:b.surf, entering:b.entering,
+            from:p, to:it.hit.P, len:it.hit.t, d:d, dOut:b.dOut, n:it.hit.n,
+            inc:b.inc, refr:b.refr, Rf:it.R, bR:b.R, tir:false, hitsAt:hitsAt};
+  }
+  function mkLeaf(it, p, d){
+    return {kind:(it.term === '射向天空' ? '天空' : '逃逸'), from:p, to:it.to, d:d, len:it.len};
+  }
+
+  /* ---------- 沿「选定分支」追踪 ----------
+     与 §7 的 TRACE 同一套物理，区别只有两点：
+       ① 入口参数是 (α, maxDepth, picks)，所以能把「预算用尽」这一种终止单独拿出来看；
+          picks[k] 指定第 k 次交互走哪条分支（金属只有一条，写 0）；不给就一律走折射。
+       ② 全程统计 hits（球面交互次数），这个数就是递归深度 */
+  function trace(alpha, maxDepth, picks){
+    var p = {x:EYE.x, y:EYE.y}, d = dir(alpha);
+    var segs = [], hits = 0, term = '', nMetal = 0, nGlass = 0, first = null, rs = [];
+    for(var k=0; k<maxDepth; k++){
+      var it = interact(p, d);
+      if(it.leaf){ segs.push(mkLeaf(it, p, d)); term = it.term; break; }
+      hits++;
+      if(!first) first = {obj:it.hit.obj, P:it.hit.P, n:it.hit.n, inc:it.inc};
+      var idx = 0;
+      if(picks && picks[k] !== undefined) idx = Math.min(picks[k], it.branches.length - 1);
+      var b = it.branches[idx];
+      segs.push(mkSeg(it, b, p, d, hits));
+      /* rs 记的是「这一面的 Fresnel 反射率 it.R」，不是「所走分支的权重 b.R」。
+         两者在玻璃表面恰好互补（折射支 b.R = 1−R、反射支 b.R = R），
+         一旦混用，扫描带那条曲线就会画成 1−R 却顶着「反射率」的纵轴 ——
+         形状同样是「一边低一边高」，肉眼看不出来，峰值还会跑到正入射那一端去。 */
+      if(b.obj === '金属球') nMetal++; else { nGlass++; rs.push(it.R); }
+      /* 自相交偏移：新起点正落在球面上时，判别式的近根 t≈0 会被丢掉，
+         于是取到「穿过整颗球之后的远根」，把「出射」判成「再次进入」。 */
+      p = {x: it.hit.P.x + b.dOut.x*EPS, y: it.hit.P.y + b.dOut.y*EPS};
+      d = b.dOut;
+    }
+    if(!term) term = 'maxDepth 截断';
+    return {alpha:alpha, maxDepth:maxDepth, segs:segs, hits:hits, term:term,
+            nMetal:nMetal, nGlass:nGlass, first:first, rs:rs, picks:picks || []};
+  }
+
+  /* ---------- 完整分支树 ----------
+     把「一条光线会怎么走」从单条路径展开成一棵带概率的树。
+     概率低于 minProb 的枝直接剪掉（画不动也没意义），其余全部保留。
+     main = 每次交互都走 0 号分支（折射优先）的那条，也就是 §8 原先唯一画出的那条。 */
+  function buildTree(alpha, maxDepth, minProb){
+    /* 先「完整」枚举，再按 minProb 挑出要画/要列的那些。
+       剪枝只应影响「画几支、列几行」，绝不能影响期望值：
+       0.30% 与 0.02% 那两枝虽然看不见，但它们照样分走一部分光，
+       把它们一起丢掉，E[命中次数] 就会从精确的 3.000 掉到 2.984 ——
+       而 2.984 正是页面正文里那条恒等式要否定的东西。 */
+    var all = [];
+    function walk(p, d, depth, prob, segs, picks, hits, nM, nG, rs){
+      var it = interact(p, d);
+      if(it.leaf){
+        all.push({picks:picks, segs:segs.concat([mkLeaf(it, p, d)]), hits:hits,
+                  term:it.term, nMetal:nM, nGlass:nG, prob:prob, rs:rs});
+        return;
+      }
+      hits++;
+      var h = it.hit;
+      for(var i=0;i<it.branches.length;i++){
+        var b = it.branches[i];
+        var np = prob * b.R;
+        var nsegs = segs.concat([mkSeg(it, b, p, d, hits)]);
+        var nPicks = picks.concat([i]);
+        var isM = (b.obj === '金属球');
+        var nnM = nM + (isM ? 1 : 0), nnG = nG + (isM ? 0 : 1);
+        var nrs = isM ? rs : rs.concat([it.R]);   /* 记这一面的反射率，不是分支权重，见 trace() 同处注释 */
+        if(depth + 1 >= maxDepth){
+          all.push({picks:nPicks, segs:nsegs, hits:hits, term:'maxDepth 截断',
+                    nMetal:nnM, nGlass:nnG, prob:np, rs:nrs});
+          continue;
+        }
+        walk({x: h.P.x + b.dOut.x*EPS, y: h.P.y + b.dOut.y*EPS}, b.dOut,
+             depth + 1, np, nsegs, nPicks, hits, nnM, nnG, nrs);
+      }
+    }
+    walk({x:EYE.x, y:EYE.y}, dir(alpha), 0, 1, [], [], 0, 0, 0, []);
+    /* 期望值在「完整」叶集上算：Σ hits·prob，分母天然是 1（概率已归一） */
+    var exp = 0, fullMass = 0;
+    for(var q=0;q<all.length;q++){ exp += all[q].hits * all[q].prob; fullMass += all[q].prob; }
+
+    var leaves = [];
+    for(var q2=0;q2<all.length;q2++) if(all[q2].prob >= minProb) leaves.push(all[q2]);
+    leaves.sort(function(x,y){ return y.prob - x.prob; });
+    var mainIdx = -1, mass = 0;
+    for(var j=0;j<leaves.length;j++){
+      mass += leaves[j].prob;
+      if(mainIdx < 0 && leaves[j].picks.every(function(v){ return v === 0; })) mainIdx = j;
+    }
+    for(var j2=0;j2<leaves.length;j2++) leaves[j2].main = (j2 === mainIdx);
+    return {alpha:alpha, maxDepth:maxDepth, leaves:leaves, mainIdx:mainIdx,
+            nAll:all.length, expected:exp, kept:mass,
+            pruned:Math.max(0, 1 - mass), fullMass:fullMass};
+  }
+
+  var LBL = {
+    '射向天空':    {t:'到达天光 → 返回背景色',  k:'k-sky'},
+    '逃出场景':    {t:'没碰到任何物体 → 返回背景色', k:'k-sky'},
+    'maxDepth 截断':{t:'弹射预算用尽 → 返回黑色', k:'k-trunc'}
+  };
+  function colorSrc(res){
+    if(res.term === 'maxDepth 截断') return '黑色（预算用尽）';
+    var s = '背景色';
+    if(res.nMetal) s += ' × 金属' + (res.nMetal > 1 ? '^' + res.nMetal : '');
+    if(res.nGlass) s += ' × 玻璃' + (res.nGlass > 1 ? '^' + res.nGlass : '');
+    return s;
+  }
+
+  /* ---------- 五种示范 + 对照 ---------- */
+  var MODES = {
+    m0: {key:'m0', label:'0 次（miss）', a:60,  depth:8, hits:0, col:'#9aa6c0'},
+    m1: {key:'m1', label:'命中 1 次',    a:-43, depth:8, hits:1, col:'#ffd666'},
+    m2: {key:'m2', label:'命中 2 次',    a:0,   depth:8, hits:2, col:'#7fe3ff'},
+    m3: {key:'m3', label:'命中 3 次',    a:-38, depth:8, hits:3, col:'#ffb08a'},
+    mx: {key:'mx', label:'maxDepth 截断', a:-38, depth:2, hits:2, col:'#ff8f8f'},
+    me: {key:'me', label:'0 次（朝下逃逸）', a:-75, depth:8, hits:0, col:'#c2ab8e'}
+  };
+  /* ORDER 的前四位是「四线对照」同屏画的那四条；mx 与 me 各自演示一种「同次数、不同结局」，
+     只在单模式里看，所以排在后面。 */
+  var ORDER = ['m0','m1','m2','m3','mx','me'];
+  /* 分支树里概率低于这个值的枝直接剪掉：画出来也看不见，列在表里只会淹掉主线。
+     m3 那支 0.30% 的「玻璃内反射两次」正好被它挡住，而 5.12% 的「反射一次」保留。 */
+  var MIN_PROB = 0.01;
+  /* 虚线分支画不画的门槛：比建树门槛更低会画成一团乱麻 */
+  var MIN_DRAW = 0.02;
+  var cur = 'm0';
+  for(var oi=0; oi<ORDER.length; oi++){
+    var mm = MODES[ORDER[oi]];
+    mm.tree = buildTree(mm.a, mm.depth, MIN_PROB);
+    mm.res = trace(mm.a, mm.depth, []);
+    mm.shownIdx = mm.tree.mainIdx;
+  }
+
+  /* ---------- 扫描：按命中次数给方向轴分段 ----------
+     步长 0.01°：区间边界要能和切线角逐位对上，太粗会对不齐。 */
+  function buildSpans(){
+    var step = 0.01, out = [], prev = null, a;
+    for(a = A0; a <= A1 + 1e-9; a += step){
+      var r = trace(a, 8);
+      if(!prev || prev.hits !== r.hits){
+        prev = {hits:r.hits, a0:a, a1:a, term:r.term};
+        out.push(prev);
+      } else { prev.a1 = a; }
+    }
+    var keep = [];
+    for(var i=0;i<out.length;i++){
+      if(out[i].a1 - out[i].a0 >= step*1.5) keep.push(out[i]);
+    }
+    return keep;
+  }
+  var SPANS = buildSpans();
+
+  /* ---------- 反射率剖面：**单独一条采样轴**，不能沿用上面那条 ----------
+     R 只依赖「第一次打中玻璃那一面的入射角余弦」，而入射角余弦只依赖撞击参数
+     b = D_G·sin|α − A_G| —— 对 α = A_G ± δ 完全同值。所以这个剖面在物理上是
+     关于球心方向 A_G 严格对称的（可验：两侧差值 0.000000）。
+     但上面那条栅格是从 A0 起数的，它的两端落在两条切线上时距离并不相等
+     （下切线差 0.0092°、上切线差 0.0014°）；而掠射端的 R 对这一点点差别极其敏感
+     ——最后 0.1° 就从 40% 冲到 96%——于是同一个物理现象被画成 81% 与 92% 两个峰。
+     看着像「物理不对称」，其实是「采样不对称」。
+     做法：以 A_G 为心取栅格，两条切线落在第 ±K_TAN 个采样点上，两侧偏移量完全相同，
+     两个掠射峰必然等高。 */
+  var RSTEP = 0.01;
+  function buildProf(){
+    var kMax = Math.ceil(Math.max(A_G-A0, A1-A_G)/RSTEP), pts = [], k, a, t;
+    for(k = -kMax; k <= kMax; k++){
+      a = A_G + k*RSTEP;
+      /* 两端截断只影响远离球的区间，切线邻域（|k| ≤ K_TAN）在两侧都完整 */
+      if(a < A0 || a > A1) continue;
+      t = trace(a, 8);
+      pts.push({a:a, k:k, r:(t.rs.length ? t.rs[0] : 0)});
+    }
+    return pts;
+  }
+  var RPROF = buildProf();
+  var K_TAN = Math.round(HLF_G/RSTEP);
+  /* 画出来的折线：按 |k| 选点，天然关于 A_G 对称。
+     不能对 RPROF 直接做 pi += 5 抽稀 —— 数组下标相对 A_G 不对称时，
+     「左峰被抽掉、右峰被留下」会让曲线重新变成一边高一边低（绕一圈回到原 bug）。
+     两个掠射峰所在的那一点无论 k 是否被 5 整除都强制保留。 */
+  var RPROF_DRAW = (function(){
+    var o = [];
+    for(var i=0;i<RPROF.length;i++){
+      var k = RPROF[i].k;
+      if(k % 5 === 0 || k === K_TAN || k === -K_TAN) o.push(RPROF[i]);
+    }
+    return o;
+  })();
+
+  /* 每一类结局占掉的方向比例（按角度算，不是按采样数） */
+  function shareOf(hits){
+    var w = 0;
+    for(var i=0;i<SPANS.length;i++){ if(SPANS[i].hits === hits) w += SPANS[i].a1 - SPANS[i].a0; }
+    return w/(A1-A0)*100;
+  }
+  var HITS_COL = {0:'#8b93a8', 1:'#ffd666', 2:'#7fe3ff', 3:'#ffb08a'};
+  var HITS_TXT = {0:'0 次（miss）', 1:'命中 1 次', 2:'命中 2 次', 3:'命中 3 次'};
+
+  /* ---------- 视图 / 绘制助手（与 §7 同一套视觉语言） ---------- */
+  function view(f){
+    var pad = 12;
+    var s = Math.min((f.w-2*pad)/(VX1-VX0), (f.h-2*pad)/(VY1-VY0));
+    var ox = (f.w - (VX1-VX0)*s)/2 - VX0*s;
+    var oy = (f.h - (VY1-VY0)*s)/2 + VY1*s;
+    return {s:s, X:function(x){return ox + x*s;}, Y:function(y){return oy - y*s;}};
+  }
+  function PX(V, q){ return {x:V.X(q.x), y:V.Y(q.y)}; }
+
+  function stroke(ctx,V,a,b,col,lw,glow){
+    var A = PX(V,a), B = PX(V,b);
+    ctx.lineCap = 'round';
+    if(glow){ ctx.strokeStyle = glow; ctx.lineWidth = lw+6;
+      ctx.beginPath(); ctx.moveTo(A.x,A.y); ctx.lineTo(B.x,B.y); ctx.stroke(); }
+    ctx.strokeStyle = col; ctx.lineWidth = lw;
+    ctx.beginPath(); ctx.moveTo(A.x,A.y); ctx.lineTo(B.x,B.y); ctx.stroke();
+  }
+
+  function drawBall(ctx,V,C,r,kind){
+    var p = PX(V,C), R = r*V.s;
+    var g = ctx.createRadialGradient(p.x - R*0.34, p.y - R*0.38, R*0.05, p.x, p.y, R*1.02);
+    if(kind === 'metal'){
+      g.addColorStop(0,'#f4f7fb'); g.addColorStop(0.30,'#bfc7d4');
+      g.addColorStop(0.68,'#6d7787'); g.addColorStop(1,'#353c48');
+    } else {
+      g.addColorStop(0,'rgba(228,248,255,0.40)'); g.addColorStop(0.55,'rgba(150,215,238,0.17)');
+      g.addColorStop(0.88,'rgba(94,178,214,0.28)'); g.addColorStop(1,'rgba(126,204,236,0.50)');
+    }
+    ctx.beginPath(); ctx.arc(p.x, p.y, R, 0, Math.PI*2);
+    ctx.fillStyle = g; ctx.fill();
+    ctx.lineWidth = (kind === 'glass') ? 1.9 : 1.4;
+    ctx.strokeStyle = (kind === 'glass') ? 'rgba(170,226,248,0.88)' : 'rgba(230,238,250,0.62)';
+    ctx.stroke();
+    if(kind === 'glass'){
+      ctx.beginPath(); ctx.arc(p.x, p.y, R*0.60, 0, Math.PI*2);
+      ctx.strokeStyle = 'rgba(170,226,248,0.20)'; ctx.lineWidth = 1; ctx.stroke();
+    }
+    ctx.beginPath(); ctx.arc(p.x - R*0.34, p.y - R*0.38, R*0.15, 0, Math.PI*2);
+    ctx.fillStyle = (kind === 'glass') ? 'rgba(255,255,255,0.50)' : 'rgba(255,255,255,0.88)';
+    ctx.fill();
+  }
+
+  function drawEye(ctx,V){
+    var p = PX(V,EYE);
+    var g = ctx.createRadialGradient(p.x,p.y,1,p.x,p.y,13);
+    g.addColorStop(0,'rgba(124,120,255,0.55)'); g.addColorStop(1,'rgba(124,120,255,0)');
+    ctx.beginPath(); ctx.arc(p.x,p.y,13,0,Math.PI*2); ctx.fillStyle = g; ctx.fill();
+    ctx.beginPath(); ctx.arc(p.x,p.y,7,0,Math.PI*2); ctx.fillStyle = '#7c78ff'; ctx.fill();
+    ctx.lineWidth = 1.6; ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.stroke();
+    ctx.beginPath(); ctx.arc(p.x,p.y,2.5,0,Math.PI*2); ctx.fillStyle = '#0c1017'; ctx.fill();
+    ctx.fillStyle = 'rgba(180,176,255,0.92)';
+    ctx.font = '600 12px ui-monospace,Consolas,monospace'; ctx.textAlign = 'center';
+    ctx.fillText('相机', p.x, p.y - 16);
+    reserve(ctx, p.x, p.y - 16, '相机', 'center');
+  }
+
+  function normalLine(ctx,V,c,u,L){
+    var a = {x:c.x - u.x*L*0.55, y:c.y - u.y*L*0.55};
+    var b = {x:c.x + u.x*L, y:c.y + u.y*L};
+    var A = PX(V,a), B = PX(V,b);
+    ctx.save();
+    ctx.setLineDash([5,4]);
+    ctx.strokeStyle = 'rgba(150,220,255,0.55)'; ctx.lineWidth = 1.3;
+    ctx.beginPath(); ctx.moveTo(A.x,A.y); ctx.lineTo(B.x,B.y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(150,220,255,0.85)';
+    ctx.beginPath(); ctx.arc(B.x,B.y,2.6,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  /* 带暗底的小标签 + 本帧避让（算法与 §7 一致）。 */
+  var _placed = [], CW = 0, CH = 0;
+  function chipReset(){ _placed.length = 0; }
+  function reserve(ctx, x, y, text, align){
+    ctx.font = '600 11.5px ui-monospace,Consolas,monospace';
+    var tw = ctx.measureText(text).width;
+    var x0 = (align === 'right') ? x - tw : (align === 'center' ? x - tw/2 : x - 5);
+    _placed.push({x:x0, y:y-11.5, w:tw + (align === 'center' ? 0 : 10), h:16});
+  }
+  function chip(ctx, x, y, text, col, align){
+    ctx.font = '600 11.5px ui-monospace,Consolas,monospace';
+    var tw = ctx.measureText(text).width, pad = 5, h = 16, w = tw + pad*2;
+    var dx = w + 6, dy = h + 4;
+    var cand = [[0,0],[0,-dy],[0,dy],[0,-2*dy],[0,2*dy],
+                [dx,0],[-dx,0],[dx,-dy],[-dx,-dy],[-dx,dy],[dx,dy],
+                [0,-3*dy],[0,3*dy]];
+    /* 候选位逐个试。判据是「与已占位标签至少隔开 MG 像素」，不是「不重叠」——
+       两个暗底标签只差 1~2px 时在深色画布上会糊成一团，看起来就是一段叠字，
+       而「不重叠」判定会放它过去。13 个候选全不合格时取重叠最轻的那个，
+       而不是退回原始位置：原始位置恰恰是最容易压字的地方，退回去等于放弃避让。 */
+    var MG = 3;
+    var rect = null, baseY = y, bestOver = Infinity, bestRect = null, bestY = y;
+    for(var k=0; k<cand.length; k++){
+      var ax = x + cand[k][0], ay = y + cand[k][1];
+      var x0 = (align === 'right') ? ax - w + pad : (align === 'center' ? ax - w/2 : ax - pad);
+      var r = {x:x0, y:ay - 11.5, w:w, h:h};
+      if(CW && CH && (r.x < 3 || r.y < 3 || r.x + r.w > CW-3 || r.y + r.h > CH-3)) continue;
+      var over = 0;
+      for(var j=0; j<_placed.length; j++){
+        var o = _placed[j];
+        var gapX = Math.max(o.x - (r.x + r.w), r.x - (o.x + o.w));
+        var gapY = Math.max(o.y - (r.y + r.h), r.y - (o.y + o.h));
+        if(gapX < MG && gapY < MG){
+          var ox = Math.min(r.x+r.w, o.x+o.w) - Math.max(r.x, o.x);
+          var oy = Math.min(r.y+r.h, o.y+o.h) - Math.max(r.y, o.y);
+          over += (ox > 0 && oy > 0) ? (100 + ox*oy) : 1;   // 真重叠重罚，只是挨太近轻罚
+        }
+      }
+      if(over < bestOver){ bestOver = over; bestRect = r; bestY = ay; }
+      if(over === 0){ rect = r; baseY = ay; break; }
+    }
+    if(!rect){ rect = bestRect || {x:x - pad, y:y - 11.5, w:w, h:h}; baseY = bestY; }
+    _placed.push(rect);
+    ctx.fillStyle = 'rgba(9,12,18,0.86)';
+    ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+    ctx.fillStyle = col;
+    ctx.textAlign = 'left';
+    ctx.fillText(text, rect.x + pad, baseY);
+  }
+
+  function angleArc(ctx,V,c,a,b,rad,col,label){
+    var A = ang(a), B = ang(b), d = B - A;
+    while(d > Math.PI) d -= Math.PI*2;
+    while(d < -Math.PI) d += Math.PI*2;
+    var C = PX(V,c), R = rad*V.s;
+    ctx.beginPath(); ctx.arc(C.x, C.y, R, A, A+d, d < 0);
+    ctx.strokeStyle = col; ctx.lineWidth = 1.6; ctx.stroke();
+    var mid = A + d/2;
+    chip(ctx, C.x + Math.cos(mid)*(R+18), C.y + Math.sin(mid)*(R+18) + 4, label, col, 'center');
+  }
+
+  /* 把逃逸段裁到视野边界上，终点标记才不会被画到画布外面 */
+  function clipToView(p, d, len){
+    var t = len;
+    if(d.x >  1e-9) t = Math.min(t, (VX1 - p.x)/d.x);
+    if(d.x < -1e-9) t = Math.min(t, (VX0 - p.x)/d.x);
+    if(d.y >  1e-9) t = Math.min(t, (VY1 - p.y)/d.y);
+    if(d.y < -1e-9) t = Math.min(t, (VY0 - p.y)/d.y);
+    if(!(t > 0)) t = 0;
+    return {x:p.x + t*d.x, y:p.y + t*d.y};
+  }
+  function segEnd(seg){ return seg.kind === '逃逸' ? clipToView(seg.from, seg.d, seg.len) : seg.to; }
+
+  /* ---------- 主画布 ---------- */
+  var showNormal = true, showGrid = true, showBranch = true;
+
+  function drawBackground(ctx, W, H, V){
+    ctx.fillStyle = '#0c1017'; ctx.fillRect(0,0,W,H);
+    if(showGrid){
+      ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth = 1;
+      for(var gx=0; gx<=Math.ceil(VX1); gx++){
+        var X = V.X(gx);
+        ctx.beginPath(); ctx.moveTo(X, V.Y(VY0)); ctx.lineTo(X, V.Y(VY1)); ctx.stroke();
+      }
+      for(var gy=0; gy<=Math.ceil(VY1); gy++){
+        var Y = V.Y(gy);
+        ctx.beginPath(); ctx.moveTo(V.X(VX0), Y); ctx.lineTo(V.X(VX1), Y); ctx.stroke();
+      }
+    }
+    var yS = V.Y(SKY_Y);
+    var gr = ctx.createLinearGradient(0,0,0,yS);
+    gr.addColorStop(0,'rgba(152,192,242,0.36)'); gr.addColorStop(1,'rgba(92,142,206,0.09)');
+    ctx.fillStyle = gr; ctx.fillRect(0,0,W,yS);
+    ctx.strokeStyle = 'rgba(162,202,246,0.55)'; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(0,yS); ctx.lineTo(W,yS); ctx.stroke();
+    ctx.fillStyle = 'rgba(184,216,250,0.78)';
+    ctx.font = '600 11.5px ui-monospace,Consolas,monospace'; ctx.textAlign='left';
+    ctx.fillText('背景（天光）  L = 1.000', 14, yS - 10);
+    reserve(ctx, 14, yS - 10, '背景（天光）  L = 1.000', 'left');
+  }
+
+  function termMark(ctx,V,p,text,col){
+    var P = PX(V,p);
+    ctx.beginPath();
+    ctx.moveTo(P.x, P.y-7); ctx.lineTo(P.x+7, P.y); ctx.lineTo(P.x, P.y+7); ctx.lineTo(P.x-7, P.y);
+    ctx.closePath(); ctx.fillStyle = col; ctx.fill();
+    ctx.lineWidth = 1.4; ctx.strokeStyle = 'rgba(12,16,23,0.85)'; ctx.stroke();
+    chip(ctx, P.x, P.y - 20, text, col, 'center');
+  }
+
+  /* 画一条完整光路；marks=true 时带法线、角度弧、命中点圆点与终点标记 */
+  function drawPath(ctx,V,res,col,lw,marks){
+    for(var i=0;i<res.segs.length;i++){
+      stroke(ctx, V, res.segs[i].from, segEnd(res.segs[i]), col, lw, 'rgba(255,255,255,0.06)');
+    }
+    if(!marks) return;
+
+    for(var k=0;k<res.segs.length;k++){
+      var s = res.segs[k];
+      if(s.hitsAt === undefined) continue;
+      if(showNormal && s.n) normalLine(ctx, V, s.to, s.n, 1.35);
+      var aIn = {x:-s.d.x, y:-s.d.y}, aOut = s.dOut || {x:s.d.x, y:s.d.y};
+      var mIn = (dot(aIn, s.n) >= 0) ? s.n : {x:-s.n.x, y:-s.n.y};
+      var mOut = (dot(aOut, s.n) >= 0) ? s.n : {x:-s.n.x, y:-s.n.y};
+      if(s.refl){
+        /* 玻璃表面的 Fresnel 反射：入射角 = 反射角，和金属一样是等角，
+           但它是「分走一部分光」而不是「全部弹回去」，所以用虚线分支去画。 */
+        angleArc(ctx,V,s.to,aIn,mIn,0.52,'#9fe8b0', s.inc.toFixed(2) + '°');
+        angleArc(ctx,V,s.to,mOut,aOut,0.52,'#ffb08a', s.refr.toFixed(2) + '°');
+      } else if(s.kind === '反射'){
+        angleArc(ctx,V,s.to,aIn,mIn,0.52,'#9fe8b0', s.inc.toFixed(1) + '°');
+        angleArc(ctx,V,s.to,mOut,aOut,0.52,'#9fe8b0', s.inc.toFixed(1) + '°');
+      } else if(s.kind === '折射进入'){
+        angleArc(ctx,V,s.to,aIn,mIn,0.52,'#9fe8b0', s.inc.toFixed(2) + '°');
+        angleArc(ctx,V,s.to,mOut,aOut,0.66,'#ffb08a', s.refr.toFixed(2) + '°');
+      } else {
+        angleArc(ctx,V,s.to,aIn,mIn,0.52,'#ffb08a', s.inc.toFixed(2) + '°');
+        angleArc(ctx,V,s.to,mOut,aOut,0.66,'#9fe8b0', s.refr.toFixed(2) + '°');
+      }
+      var pv = PX(V, s.to);
+      ctx.beginPath(); ctx.arc(pv.x, pv.y, 4.2, 0, Math.PI*2);
+      ctx.fillStyle = (s.obj === '金属球') ? '#ffd666' : '#7fe3ff'; ctx.fill();
+      ctx.lineWidth = 1.4; ctx.strokeStyle = 'rgba(12,16,23,0.85)'; ctx.stroke();
+    }
+
+    /* 终点标记：说清这条光线为什么停在这里 */
+    var last = res.segs[res.segs.length-1];
+    var cut = (res.term === 'maxDepth 截断');
+    var txt = cut
+      ? ('预算用尽 → 黑  ·  ' + res.hits + ' 次')
+      : ('停在这里：' + (res.term === '射向天空' ? '背景色' : '离开场景') + '  ·  ' + res.hits + ' 次命中');
+    termMark(ctx, V, segEnd(last), txt, cut ? '#ff8f8f' : col);
+  }
+
+  /* ---------- 当前「当作主线看」的那一支 ----------
+     默认是概率最大的那条（也就是全折射支，等于 trace() 的结果）。
+     用户点分支表选了别的支之后，主线和账本都要跟着换成那一支 ——
+     否则「选中」只是表格里的一行高亮，画面纹丝不动，点它就没有意义。
+     主线支直接复用 mode.res：它是 trace() 确定性算出来的，与树里那条数值一致，
+     但带着 shareOf / colorSrc 需要的全部字段，重新拼一遍反而容易漏字段。 */
+  function dispRes(mode){
+    var lf = (mode.tree && mode.shownIdx >= 0) ? mode.tree.leaves[mode.shownIdx] : null;
+    if(!lf || lf.main) return mode.res;
+    return {alpha:mode.a, maxDepth:mode.depth, segs:lf.segs, hits:lf.hits, term:lf.term,
+            nMetal:lf.nMetal, nGlass:lf.nGlass, first:null, rs:lf.rs, picks:lf.picks};
+  }
+
+  /* ---------- 分支表：同一个方向上的全部结局 ----------
+     概率 = 沿途各表面 Fresnel 系数的连乘；表按概率降序，和 buildTree 的排序一致。
+     点一行 = 把那一支提成主线；再点同一行 = 退回概率最大的那一支。 */
+  function branchPath(lf){
+    var parts = [];
+    for(var i=0;i<lf.segs.length;i++){
+      var s = lf.segs[i];
+      if(s.hitsAt === undefined) continue;
+      var t;
+      if(s.kind === '反射') t = '金属反射';
+      else if(s.refl) t = '玻璃' + s.surf + '反射';
+      else if(s.kind === '折射进入') t = '玻璃折射进入';
+      else t = '玻璃折射出射';
+      parts.push(t);
+    }
+    var end = (lf.term === '射向天空') ? '天光' : (lf.term === '逃出场景' ? '离开场景' : '预算用尽');
+    return parts.concat([end]);
+  }
+  function renderBtree(mode){
+    var box = $('#count-btree');
+    if(!box) return;
+    var tree = mode.tree;
+    if(!tree){ box.innerHTML = ''; return; }
+    var sig = (mode.key || '') + '#' + mode.shownIdx + '#' + tree.leaves.length;
+    if(sig === _btKey) return;
+    _btKey = sig;
+    box.innerHTML = '';
+    for(var i=0;i<tree.leaves.length;i++){
+      var lf = tree.leaves[i];
+      var row = document.createElement('div');
+      row.className = 'brow' + (lf.main ? ' main' : '') + (i === mode.shownIdx ? ' sel' : '');
+      var pr = document.createElement('div'); pr.className = 'pr'; pr.textContent = (lf.prob*100).toFixed(2) + '%';
+      var hi = document.createElement('div'); hi.className = 'hits'; hi.textContent = lf.hits + ' 次';
+      var pa = document.createElement('div'); pa.className = 'path';
+      var pth = branchPath(lf);
+      for(var k=0;k<pth.length;k++){
+        /* 分隔符用 <span> 而不是 <em>：<em> 在本页被扫描带图例占用，
+           混进来会让「图例里有几条」这类跨组件断言被污染。 */
+        if(k){ var ar = document.createElement('span'); ar.className = 'ar'; ar.textContent = ' → '; pa.appendChild(ar); }
+        /* 末段是归宿，加粗突出；中间各段是走法，保持常规色 */
+        var el = document.createElement(k === pth.length-1 ? 'b' : 'span');
+        el.textContent = pth[k];
+        pa.appendChild(el);
+      }
+      row.appendChild(pr); row.appendChild(hi); row.appendChild(pa);
+      (function(idx){
+        row.addEventListener('click', function(){
+          var mm = MODES[cur];
+          if(!mm || !mm.tree) return;
+          mm.shownIdx = (mm.shownIdx === idx) ? mm.tree.mainIdx : idx;
+          _lastKey = ''; _btKey = '';
+          draw(); drawCone();
+        });
+      })(i);
+      box.appendChild(row);
+    }
+  }
+
+  /* ---------- 把「没走的那几支」画成虚线 ----------
+     这是本节补上的关键一半：§7 与 §8 原先都只画折射分支，
+     于是画面让人以为「光进玻璃就一定是穿过去」。实际玻璃表面同时反射走一部分光。
+     线宽固定、透明度随概率走 —— 概率越小越淡，肉眼一眼能分出主次。
+     分支点处标出该表面的反射率，终点画个小菱形，具体数字交给右侧分支表。 */
+  function drawGhosts(ctx, V, mode){
+    var L = mode.tree ? mode.tree.leaves : null;
+    if(!L) return;
+    for(var i=0;i<L.length;i++){
+      var lf = L[i];
+      if(i === mode.shownIdx || lf.prob < MIN_DRAW) continue;
+      var al = 0.18 + 0.72*Math.min(1, lf.prob*3.2);
+      var col = 'rgba(255,176,120,' + al.toFixed(2) + ')';
+      ctx.save();
+      ctx.setLineDash([6,5]);
+      for(var k=0;k<lf.segs.length;k++){
+        var sg = lf.segs[k];
+        stroke(ctx, V, sg.from, segEnd(sg), col, 1.7, null);
+      }
+      ctx.restore();
+      /* 分支点：这条虚线是从哪个玻璃表面的哪一次命中分出去的 */
+      var br = null;
+      for(var k2=0;k2<lf.segs.length;k2++){
+        if(lf.segs[k2].refl && lf.segs[k2].hitsAt !== undefined) br = lf.segs[k2];
+      }
+      if(br){
+        var bp = PX(V, br.to);
+        ctx.beginPath(); ctx.arc(bp.x, bp.y, 3.0, 0, Math.PI*2);
+        ctx.fillStyle = 'rgba(255,176,120,0.95)'; ctx.fill();
+        chip(ctx, bp.x, bp.y + 26, '≈' + (br.bR*100).toFixed(2) + '% 反射', '#ffb08a', 'center');
+      }
+      /* 终点小菱形：只标位置，不抢主线的标注 */
+      var e2 = PX(V, segEnd(lf.segs[lf.segs.length-1]));
+      ctx.beginPath();
+      ctx.moveTo(e2.x, e2.y-5); ctx.lineTo(e2.x+5, e2.y); ctx.lineTo(e2.x, e2.y+5); ctx.lineTo(e2.x-5, e2.y);
+      ctx.closePath(); ctx.fillStyle = col; ctx.fill();
+    }
+  }
+
+  function draw(){
+    var f = fit(cv), ctx = f.ctx, W = f.w, H = f.h, V = view(f);
+    ctx.clearRect(0,0,W,H);
+    chipReset(); CW = W; CH = H;
+
+    drawBackground(ctx, W, H, V);
+
+    /* 两颗球名：先把各自的矩形登记进避让表，但一个字都不落。
+       登记必须发生在画光线之前，否则光线上的入射/出射标注在找位置时
+       根本不知道球名在哪，就会挑到一个正好压在球名上的位置；
+       而落字仍留到最后，光线才不会反过来压住球名。（两件事要分开做） */
+    var mLabel = '金属球  r = 1.00';
+    var gLabel = '玻璃球  ior = 1.5';
+    var mPos = {x:V.X(MC.x), y:V.Y(MC.y - R_METAL) + 15};
+    var gPos = {x:V.X(GC.x), y:V.Y(GC.y + R_GLASS) - 10};
+    reserve(ctx, mPos.x, mPos.y, mLabel, 'center');
+    reserve(ctx, gPos.x, gPos.y, gLabel, 'center');
+
+    if(cur === 'all'){
+      /* 四线对照：同一场景、四条方向，四种命运 */
+      for(var i=0;i<4;i++){
+        var m = MODES[ORDER[i]];
+        drawPath(ctx, V, m.res, m.col, 2.4, false);
+      }
+      for(var j2=0;j2<4;j2++){
+        var m2 = MODES[ORDER[j2]];
+        var lastS = m2.res.segs[m2.res.segs.length-1];
+        termMark(ctx, V, segEnd(lastS), m2.res.hits + ' 次命中', m2.col);
+      }
+    } else {
+      /* 先画虚线分支、再画主线：主线压在虚线之上，主次一眼分明 */
+      if(showBranch) drawGhosts(ctx, V, MODES[cur]);
+      drawPath(ctx, V, dispRes(MODES[cur]), MODES[cur].col, 2.8, true);
+    }
+
+    drawBall(ctx,V,MC,R_METAL,'metal');
+    drawBall(ctx,V,GC,R_GLASS,'glass');
+    drawEye(ctx,V);
+
+    ctx.font = '600 11.5px ui-monospace,Consolas,monospace'; ctx.textAlign='center';
+    ctx.fillStyle = 'rgba(206,212,226,0.85)';
+    ctx.fillText(mLabel, mPos.x, mPos.y);
+    ctx.fillStyle = 'rgba(178,224,246,0.92)';
+    ctx.fillText(gLabel, gPos.x, gPos.y);
+
+    updatePanels();
+  }
+
+  /* ---------- 扫描带 ----------
+     字号下限 11.5px：本页等宽标签在 10px / 10.5px 下会被渲染成互相压住的糊字
+     （同一字体 11.5px 就正常，与内容无关）。这不是审美偏好，是实测出来的渲染下限 ——
+     见 _shot.js 的字体隔离实验，所以别再把这些标签「顺手」调小。 */
+  function drawCone(){
+    var f = fit(cvCone), ctx = f.ctx, W = f.w, H = f.h;
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle = '#0c1017'; ctx.fillRect(0,0,W,H);
+
+    var x0 = 78, x1 = W - 18;
+    function A(a){ return x0 + (a - A0)/(A1-A0)*(x1-x0); }
+    /* 反射率条：100% 在上、0% 在下。切线虚线要一路穿到条底，
+       这样「分段边界」与「反射率尖峰」是否重合，肉眼直接能对。 */
+    var YR0 = 176, YR1 = 210;
+    function YR(r){ return YR1 - Math.min(1, Math.max(0, r))*(YR1-YR0); }
+
+    ctx.font = '600 11.5px ui-monospace,Consolas,monospace';
+    ctx.textAlign = 'right';
+    ctx.fillStyle = 'rgba(175,184,208,0.95)';
+    ctx.fillText('金属球覆盖', x0-10, 40);
+    ctx.fillText('玻璃球覆盖', x0-10, 62);
+    ctx.fillText('命中次数', x0-10, 112);
+    ctx.fillText('玻璃反射率', x0-10, 196);
+
+    /* 四条切线：扫描带的分段边界就是它们 */
+    var TANS = [TAN_M.lo, TAN_M.hi, TAN_G.lo, TAN_G.hi];
+    ctx.font = '600 11.5px ui-monospace,Consolas,monospace'; ctx.textAlign='center';
+    for(var i=0;i<TANS.length;i++){
+      var X = A(TANS[i]);
+      ctx.save();
+      ctx.setLineDash([3,4]);
+      ctx.strokeStyle = 'rgba(255,255,255,0.22)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(X, 20); ctx.lineTo(X, YR1); ctx.stroke();
+      ctx.restore();
+      ctx.fillStyle = 'rgba(160,170,200,0.72)';
+      ctx.fillText(TANS[i].toFixed(1) + '°', X, 14);
+    }
+
+    /* 两颗球「占住」的方向区间 */
+    function band(a0,a1,y,h,col){
+      var X0 = A(a0), X1 = A(a1);
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      if(ctx.roundRect) ctx.roundRect(X0, y, X1-X0, h, 5); else ctx.rect(X0, y, X1-X0, h);
+      ctx.fill();
+    }
+    band(TAN_M.lo, TAN_M.hi, 28, 16, 'rgba(255,214,102,0.42)');
+    band(TAN_G.lo, TAN_G.hi, 50, 16, 'rgba(127,227,255,0.40)');
+
+    /* 命中次数分布 */
+    for(var s=0;s<SPANS.length;s++){
+      var sp = SPANS[s], Xa = A(sp.a0), Xb = A(sp.a1);
+      ctx.fillStyle = HITS_COL[sp.hits] || '#8b93a8';
+      ctx.globalAlpha = (sp.hits === 0) ? 0.55 : 0.85;
+      ctx.fillRect(Xa, 88, Math.max(1.5, Xb-Xa), 34);
+      ctx.globalAlpha = 1;
+      if(Xb - Xa > 26){
+        ctx.fillStyle = '#0c1017';
+        ctx.font = '700 13px ui-monospace,Consolas,monospace'; ctx.textAlign='center';
+        ctx.fillText(String(sp.hits), (Xa+Xb)/2, 111);
+      }
+    }
+    /* 3 次那一小段太窄，单独点名 */
+    var s3 = null;
+    for(var s2=0;s2<SPANS.length;s2++){ if(SPANS[s2].hits === 3) s3 = SPANS[s2]; }
+    if(s3){
+      var X3 = (A(s3.a0)+A(s3.a1))/2;
+      ctx.strokeStyle = '#ffb08a'; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.moveTo(X3, 86); ctx.lineTo(X3, 70); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,176,138,0.95)';
+      ctx.font = '700 11.5px ui-monospace,Consolas,monospace'; ctx.textAlign='center';
+      ctx.fillText('只有 ' + shareOf(3).toFixed(1) + '%', X3, 66);
+    }
+
+    /* 坐标轴 */
+    ctx.strokeStyle = 'rgba(255,255,255,0.22)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x0, 130); ctx.lineTo(x1, 130); ctx.stroke();
+    ctx.font = '600 11.5px ui-monospace,Consolas,monospace'; ctx.textAlign='center';
+    for(var t=A0; t<=A1; t+=30){
+      var Xt = A(t);
+      ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+      ctx.beginPath(); ctx.moveTo(Xt, 130); ctx.lineTo(Xt, 135); ctx.stroke();
+      ctx.fillStyle = 'rgba(150,160,190,0.85)';
+      ctx.fillText(t + '°', Xt, 149);
+    }
+    ctx.fillStyle = 'rgba(150,160,190,0.6)';
+    ctx.textAlign = 'left';
+    ctx.fillText('α = 发射方向（朝前的半圈）', x0, 167);
+
+    /* ---- 玻璃表面反射率剖面 ----
+       上面那条「命中次数」是被切线切成硬块的，而真实渲染里玻璃表面的反射率
+       随入射角剧烈变化：正入射只有 4%，掠射可以到 90% 以上。
+       曲线只在「这条路径真的碰到玻璃」的方向上非零，每一段都在掠射端冲向高处。
+       注意两个掠射峰**必须等高**：R 只看撞击参数 b = D_G·sin|α − A_G|，
+       对 α = A_G ± δ 同值，所以剖面关于球心方向严格对称。若画出来一高一低，
+       那是采样轴没对准 A_G（栅格离两条切线的距离不等），不是物理。 */
+    ctx.fillStyle = 'rgba(255,255,255,0.045)';
+    ctx.fillRect(x0, YR0, x1-x0, YR1-YR0);
+    ctx.save();
+    ctx.setLineDash([4,4]); ctx.strokeStyle = 'rgba(255,255,255,0.30)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x0, YR(0.04)); ctx.lineTo(x1, YR(0.04)); ctx.stroke();
+    ctx.restore();
+
+    var pStart = A(RPROF[0].a), pEnd = A(RPROF[RPROF.length-1].a);
+    ctx.beginPath();
+    ctx.moveTo(A(RPROF_DRAW[0].a), YR(RPROF_DRAW[0].r));
+    for(var pi=1; pi<RPROF_DRAW.length; pi++) ctx.lineTo(A(RPROF_DRAW[pi].a), YR(RPROF_DRAW[pi].r));
+    ctx.lineTo(pEnd, YR1); ctx.lineTo(pStart, YR1); ctx.closePath();
+    ctx.fillStyle = 'rgba(127,227,255,0.20)'; ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(A(RPROF_DRAW[0].a), YR(RPROF_DRAW[0].r));
+    for(var pi2=1; pi2<RPROF_DRAW.length; pi2++) ctx.lineTo(A(RPROF_DRAW[pi2].a), YR(RPROF_DRAW[pi2].r));
+    ctx.strokeStyle = 'rgba(127,227,255,0.92)'; ctx.lineWidth = 1.5; ctx.stroke();
+
+    ctx.font = '600 11.5px ui-monospace,Consolas,monospace'; ctx.textAlign='left';
+    ctx.fillStyle = 'rgba(127,227,255,0.80)';
+    ctx.fillText('100%', x0+4, YR0+11);
+    ctx.fillText('4%（正入射极限）', x0+4, YR(0.04)+11);
+    /* 两个掠射峰：分别取 A_G 左右两侧的最高点，各自标一个点。
+       把峰值出现的角度一并写出来 —— 这两个角必须分别落在玻璃的两条切线附近（掠射），
+       且**高度相等**（对称采样轴的直接后果）。
+       若哪天把纵轴画成 1−R（透射率），峰值会跑到正入射那一端去，
+       曲线形状依旧是「一边低一边高」，只有把角度写出来才一眼看得出不对。 */
+    var rPkL = 0, aPkL = 0, rPkR = 0, aPkR = 0;
+    for(var pk=0; pk<RPROF.length; pk++){
+      var pp = RPROF[pk];
+      if(pp.r <= 0) continue;
+      if(pp.a < A_G){ if(pp.r > rPkL){ rPkL = pp.r; aPkL = pp.a; } }
+      else { if(pp.r > rPkR){ rPkR = pp.r; aPkR = pp.a; } }
+    }
+    if(rPkL > 0.2 || rPkR > 0.2){
+      var two = (rPkL > 0 && rPkR > 0);
+      var rTop = Math.max(rPkL, rPkR);
+      if(two && Math.abs(rPkL - rPkR) > 0.005){
+        /* 真出现了不等高：说明采样轴对称性被破坏，别把数字藏起来 */
+        ctx.fillStyle = 'rgba(255,120,120,0.98)';
+        ctx.font = '700 11.5px ui-monospace,Consolas,monospace'; ctx.textAlign = 'left';
+        ctx.fillText('⚠ 两峰不等高 ' + (rPkL*100).toFixed(1) + '% / ' + (rPkR*100).toFixed(1) + '%', x0+4, YR0+30);
+      }
+      if(aPkL) { ctx.beginPath(); ctx.arc(A(aPkL), YR(rPkL), 2.6, 0, Math.PI*2); ctx.fillStyle='rgba(255,176,120,0.98)'; ctx.fill(); }
+      if(aPkR) { ctx.beginPath(); ctx.arc(A(aPkR), YR(rPkR), 2.6, 0, Math.PI*2); ctx.fillStyle='rgba(255,176,120,0.98)'; ctx.fill(); }
+      /* 标注放在带上方右侧的空白区，右对齐到带右端：
+         峰顶本身只离带顶边 1.3px，任何贴着峰写的字都会盖住它自己标的那根尖峰；
+         而带上方那一行的左边已有「α = 发射方向…」，右边正好是空的。
+         两个峰值角都写进这一行，读者不必猜哪个峰是哪个。 */
+      ctx.textAlign = 'right';
+      ctx.fillStyle = 'rgba(255,176,120,0.95)';
+      ctx.font = '700 11.5px ui-monospace,Consolas,monospace';
+      ctx.fillText('掠射 ' + (rTop*100).toFixed(0) + '%（α = ' + (aPkL || aPkR).toFixed(1)
+        + '° / ' + (aPkR || aPkL).toFixed(1) + '°，两峰等高）', x1 - 6, YR0 - 7);
+    }
+
+    /* 当前模式的游标 */
+    var aCur = (cur === 'all') ? null : MODES[cur].a;
+    if(aCur !== null && aCur !== undefined){
+      var Xc = A(aCur);
+      ctx.strokeStyle = 'rgba(124,120,255,0.9)'; ctx.lineWidth = 1.6;
+      ctx.save(); ctx.setLineDash([4,3]);
+      ctx.beginPath(); ctx.moveTo(Xc, 84); ctx.lineTo(Xc, YR1); ctx.stroke();
+      ctx.restore();
+      ctx.beginPath();
+      ctx.moveTo(Xc, 130); ctx.lineTo(Xc-5, 138); ctx.lineTo(Xc+5, 138);
+      ctx.closePath(); ctx.fillStyle = '#7c78ff'; ctx.fill();
+      ctx.fillStyle = 'rgba(180,176,255,0.95)';
+      ctx.font = '700 11.5px ui-monospace,Consolas,monospace'; ctx.textAlign='center';
+      ctx.fillText('α = ' + aCur.toFixed(1) + '°', Xc, 161);
+    }
+  }
+
+  /* ---------- 图例（同时也是一份可读的占比表） ---------- */
+  if(spansEl){
+    for(var si=0; si<SPANS.length; si++){
+      var spn = SPANS[si];
+      (function(spn){
+        var el = document.createElement('span');
+        el.className = 'sp';
+        var ic = document.createElement('i');
+        ic.style.background = HITS_COL[spn.hits] || '#8b93a8';
+        var tx = document.createElement('span');
+        tx.textContent = HITS_TXT[spn.hits] || ('命中 ' + spn.hits + ' 次');
+        var rg = document.createElement('em');
+        rg.textContent = spn.a0.toFixed(1) + '°~' + spn.a1.toFixed(1) + '° · '
+          + ((spn.a1-spn.a0)/(A1-A0)*100).toFixed(1) + '%';
+        el.appendChild(ic); el.appendChild(tx); el.appendChild(rg);
+        el.addEventListener('click', function(){
+          setMode(spn.hits === 0 ? (spn.term === '逃出场景' ? 'me' : 'm0')
+            : (spn.hits === 1 ? 'm1' : (spn.hits === 2 ? 'm2' : 'm3')));
+        });
+        spansEl.appendChild(el);
+      })(spn);
+    }
+  }
+
+  /* ---------- 读数与面板 ---------- */
+  var _lastKey = '', _btKey = '';
+  function updatePanels(){
+    var res = (cur === 'all') ? MODES.m3.res : dispRes(MODES[cur]);
+    var tree = (cur === 'all') ? null : MODES[cur].tree;
+    /* 注意 MODES['all'] 不存在（它不是一种材料路径，只是四条线的并排视图），
+       所以这里一律先取到 null 再判断，不能直接写 MODES[cur].shownIdx。 */
+    var shownIdx = (cur === 'all') ? -1 : MODES[cur].shownIdx;
+    var shown = (tree && shownIdx >= 0) ? tree.leaves[shownIdx] : null;
+    var key = cur + '|' + res.hits + '|' + res.term + '|' + shownIdx;
+    if(key === _lastKey) return;
+    _lastKey = key;
+
+    function set(id, v){ var e = $('#o-'+id); if(e) e.textContent = v; }
+    set('ca', (cur === 'all') ? '四条' : f2(MODES[cur].a) + '°');
+    set('chit', (cur === 'all') ? '0 / 1 / 2 / 3' : res.hits + ' 次 / depth ' + res.hits);
+    set('cterm', (cur === 'all') ? '四种结局同屏' : res.term);
+    set('ccol', (cur === 'all') ? '见各线终点标注' : colorSrc(res));
+    set('cshare', (cur === 'all') ? '—' : shareOf(res.hits).toFixed(1) + '%');
+    set('cdepth', (cur === 'all') ? '8' : String(MODES[cur].depth));
+    /* 玻璃表面反射率：依次列出这条路径碰到玻璃的每一面 */
+    var rTxt = '—';
+    if(cur !== 'all'){
+      var rss = [];
+      for(var si=0; si<res.segs.length; si++){
+        if(res.segs[si].refl !== undefined && res.segs[si].obj === '玻璃球' && res.segs[si].hitsAt !== undefined){
+          rss.push(res.segs[si].surf.charAt(0) + ' ' + (res.segs[si].Rf*100).toFixed(2) + '%');
+        }
+      }
+      if(rss.length) rTxt = rss.join(' · ');
+    }
+    set('crin', rTxt);
+    set('cprob', (cur === 'all' || !shown) ? '—' : (shown.prob*100).toFixed(2) + '%');
+    set('cexp', (cur === 'all' || !tree) ? '—' : tree.expected.toFixed(3) + ' 次');
+
+    if(lb){
+      lb.textContent = (cur === 'all')
+        ? '四线对照 · 0/1/2/3 次'
+        : (MODES[cur].label + ' · depth ' + res.hits + '/' + MODES[cur].depth);
+    }
+    if(capEl){
+      capEl.textContent = (cur === 'all')
+        ? '四条光线：0 次（灰）· 1 次（黄）· 2 次（青）· 3 次（橙）。'
+        : '当前：α = ' + f2(res.alpha) + '°，命中 ' + res.hits + ' 次，'
+          + res.term + '。这条方向占朝前半圈的 ' + shareOf(res.hits).toFixed(1) + '%。';
+    }
+
+    /* 账本：一次命中一行，最后一行是终止原因 */
+    if(ledgerEl){
+      ledgerEl.innerHTML = '';
+      var rows = [];
+      rows.push({n:'①', t:'发射：相机朝 α = ' + f2(res.alpha) + '° 射出一条光线', k:'', when:true,
+                 d:'起点 (' + f2(EYE.x) + ', ' + f2(EYE.y) + ')   ' + 'max_depth = ' + res.maxDepth});
+      for(var i=0;i<res.segs.length;i++){
+        var s = res.segs[i];
+        if(s.hitsAt === undefined) continue;
+        var nn = ['②','③','④','⑤','⑥','⑦','⑧'][s.hitsAt-1] || ('第' + s.hitsAt);
+        if(s.kind === '反射'){
+          rows.push({n:nn, t:'第 ' + s.hitsAt + ' 次命中：打在金属球上被弹开', k:'k-metal', when:true,
+                     d:'命中点 (' + f2(s.to.x) + ', ' + f2(s.to.y) + ')   入射 ' + f2(s.inc)
+                       + '° = 反射 ' + f2(s.refr) + '°'});
+        } else if(s.refl){
+          rows.push({n:nn, t:'第 ' + s.hitsAt + ' 次命中：在玻璃' + s.surf + '被反射走（Fresnel 反射）', k:'k-fres', when:true,
+                     d:'反射点 (' + f2(s.to.x) + ', ' + f2(s.to.y) + ')   ' + s.surf
+                       + ' 反射率 ' + (s.bR*100).toFixed(2) + '% → 这一支只分走这么多光'
+                       + '\n入射 ' + f2(s.inc) + '° = 反射 ' + f2(s.refr) + '°'});
+        } else if(s.kind === '折射进入'){
+          rows.push({n:nn, t:'第 ' + s.hitsAt + ' 次命中：折射进入玻璃球（换介质）', k:'k-glass', when:true,
+                     d:'入场点 (' + f2(s.to.x) + ', ' + f2(s.to.y) + ')   1.0 × sin ' + f2(s.inc)
+                       + '° = 1.5 × sin ' + f2(s.refr) + '°'});
+        } else {
+          rows.push({n:nn, t:'第 ' + s.hitsAt + ' 次命中：从球内折射出射（回到空气）', k:'k-glass', when:true,
+                     d:'出场点 (' + f2(s.to.x) + ', ' + f2(s.to.y) + ')   1.5 × sin ' + f2(s.inc)
+                       + '° = 1.0 × sin ' + f2(s.refr) + '°'});
+        }
+      }
+      var LI = LBL[res.term] || {t:res.term, k:'k-sky'};
+      var lastN = ['②','③','④','⑤','⑥','⑦','⑧'][res.hits] || ('第' + (res.hits+1));
+      rows.push({n:lastN, t:'终止：' + LI.t, k:LI.k, when:true,
+                 d:(res.term === 'maxDepth 截断')
+                   ? '已交互 ' + res.hits + ' 次，达到 max_depth = ' + res.maxDepth + '，不再产生新光线 → 颜色按 0 处理'
+                   : '累计 ' + res.hits + ' 次球面交互，最终颜色 = ' + colorSrc(res)});
+
+      for(var r2=0; r2<rows.length; r2++){
+        var rw = rows[r2];
+        var row = document.createElement('div'); row.className = 'row ' + rw.k + (rw.when ? ' on' : '');
+        var nEl = document.createElement('div'); nEl.className = 'n'; nEl.textContent = rw.n;
+        var wEl = document.createElement('div');
+        var tEl = document.createElement('div'); tEl.className = 't'; tEl.textContent = rw.t;
+        var dEl = document.createElement('div'); dEl.className = 'd'; dEl.textContent = rw.d;
+        wEl.appendChild(tEl); wEl.appendChild(dEl);
+        row.appendChild(nEl); row.appendChild(wEl);
+        ledgerEl.appendChild(row);
+      }
+    }
+
+    if(nowBox){
+      var res2 = res;
+      var html = '';
+      if(cur === 'all'){
+        html = '<b>四线对照：同一个场景，四条光线，四种命运。</b><br>'
+             + '它们全部从同一个眼位出发，只是方向不同——'
+             + '0 次的方向什么都没碰到，1 次的方向只被金属弹了一下，'
+             + '2 次的方向只在玻璃球里穿了一次，3 次的方向才把两颗球都走了一遍。<br>'
+             + '<span class="muted">注意四条线的末端标注：没有一条是「命中表面就结束」的，'
+             + '全部停在「问到空处」或者「预算用尽」。</span>';
+      } else if(res2.term === 'maxDepth 截断'){
+        html = '<b>同一方向、同一条光线，只因预算不够就变成了黑色。</b><br>'
+             + '这里把 <code>max_depth</code> 从 8 降到 2：光线照样打在金属球上、照样进了玻璃球，'
+             + '但第二次交互之后预算就用尽了，递归不再往下走，<b>这次采样直接按 0 计</b>。<br>'
+             + '<span class="muted">§6 画面里那些没被照亮的黑点和噪点，一部分就是这个原因——'
+             + '不是那里真的黑，而是那几条光线还没问到答案就被强行截断了。</span>';
+      } else if(res2.term === '逃出场景'){
+        html = '<b>0 次命中，但结局和上一种不同：这条光线朝下，根本没够到天光。</b><br>'
+             + 'α = ' + f2(res2.alpha) + '° 指向斜下方，两颗球都不在这条线上，'
+             + '它会一直往下走、走出画面——所以最终颜色<b>仍然是背景色</b>，'
+             + '但终止原因是「离开场景」而不是「到达天光」。<br>'
+             + '<span class="muted">程序上这里最容易写错：判断「有没有碰到天光」通常写成 '
+             + '<code>t = (SKY_Y − p.y) / d.y</code>，而朝下的光线 <code>d.y &lt; 0</code>，'
+             + '算出来是负数、会被 <code>t &gt; 1e-9</code> 顺手挡掉；'
+             + '但一旦给这种情况兜底成 <code>Infinity</code>，判据就会漏判有限性，'
+             + '把「向下打空」当成「到达天光」，终点坐标变成无穷大——'
+             + '画面上只是少了一条线，不报任何错。</span>';
+      } else if(res2.hits === 0){
+        html = '<b>0 次命中：光线什么也没碰到。</b><br>'
+             + '这是最常见的一种结局（占朝前半圈 <b>' + shareOf(0).toFixed(1) + '%</b>），也是最简单的一种——'
+             + '<code>ray_color</code> 不需要任何几何计算，直接返回背景色就结束了。<br>'
+             + '<span class="muted">注意「什么也没碰到」有两类走法：'
+             + '朝上的会碰到天光（α = ' + f2(MODES.m0.a) + '° 这条），'
+             + '朝下的则直接走出场景（点「0 次（朝下逃逸）」看另一条）。'
+             + '两颗球之间的缝隙、球的上方、球的后方，全都是 0 次命中。</span>';
+      } else if(res2.hits === 1){
+        html = '<b>1 次命中：只被金属球弹了一下，新的光线就离开了场景。</b><br>'
+             + '入射角 <b>' + f2(res2.segs[0].inc) + '°</b>，反射角同样是 <b>' + f2(res2.segs[0].inc)
+             + '°</b>，这条链只有一环：<b>背景色 × 金属系数</b>。<br>'
+             + '<span class="muted">「弹射 1 次」= 递归深度 1：问了一次「那个点看到什么」，'
+             + '而那个点看到的是背景。</span>';
+      } else if(res2.hits === 2){
+        html = '<b>2 次命中：只进了玻璃球，在球内走完弦，从另一侧出去。</b><br>'
+             + '入场入射角 <b>' + f2(res2.segs[0].inc) + '°</b> → 折射角 <b>' + f2(res2.segs[0].refr)
+             + '°</b>；出场入射角 <b>' + f2(res2.segs[1].inc) + '°</b> → 折射回 <b>'
+             + f2(res2.segs[1].refr) + '°</b>。<br>'
+             + '<span class="muted">两端角度完全对称，正是 §7 那条「弦的等腰性质」——'
+             + '所以这条路径不需要金属球参与，也能演示两次 Snell。</span>';
+      } else {
+        html = '<b>3 次命中：把两颗球都走了一遍，就是 §7 那条路径。</b><br>'
+             + '金属反射 <b>' + f2(res2.segs[0].inc) + '°</b> → 玻璃入场 <b>' + f2(res2.segs[1].inc)
+             + '°→' + f2(res2.segs[1].refr) + '°</b> → 玻璃出场 <b>' + f2(res2.segs[2].inc)
+             + '°→' + f2(res2.segs[2].refr) + '°</b>。<br>'
+             + '<span class="muted">递归深度 3，颜色要连乘三次系数：'
+             + '背景色 × 金属 × 玻璃²。这类方向只占 <b>' + shareOf(3).toFixed(1)
+             + '%</b>——漂亮，但极其罕见。</span>';
+      }
+      nowBox.innerHTML = html;
+    }
+
+    /* 分支表放在最后：它的行内标注要用到上面算好的读数口径，
+       而且它是「选中哪一支」的入口，必须在 res/shown 都已经定下来之后再渲染。 */
+    if(cur === 'all'){ var bb0 = $('#count-btree'); if(bb0){ bb0.innerHTML = ''; _btKey = ''; } }
+    else renderBtree(MODES[cur]);
+  }
+
+  /* ---------- 控件 ---------- */
+  var btns = {};
+  for(var bi=0; bi<ORDER.length; bi++){
+    (function(k){
+      var b = $('#bt-cnt-' + k);
+      if(b) btns[k] = b;
+    })(ORDER[bi]);
+  }
+  var btAll = $('#bt-cnt-all');
+
+  function setMode(k){
+    cur = k;
+    for(var i=0;i<ORDER.length;i++){
+      var b = btns[ORDER[i]];
+      if(b) b.className = 'btn ghost' + (k === ORDER[i] ? ' on' : '');
+    }
+    if(btAll) btAll.className = 'btn ghost' + (k === 'all' ? ' on' : '');
+    _lastKey = '';
+    updatePanels();
+    drawCone();
+  }
+  for(var qi=0; qi<ORDER.length; qi++){
+    (function(k){
+      var b = btns[k];
+      if(b) b.addEventListener('click', function(){ setMode(k); });
+    })(ORDER[qi]);
+  }
+  if(btAll) btAll.addEventListener('click', function(){ setMode('all'); });
+
+  var ckN = $('#ck-cnt-normal'), ckG = $('#ck-cnt-grid'), ckB = $('#ck-cnt-branch');
+  if(ckN) ckN.addEventListener('change', function(){ showNormal = ckN.checked; });
+  if(ckG) ckG.addEventListener('change', function(){ showGrid = ckG.checked; });
+  /* 关掉分支不影响主线和读数：只把「没走的那几支」的虚线收起来，
+     方便在四条线挤在一起时看清主线到底怎么走。 */
+  if(ckB) ckB.addEventListener('change', function(){ showBranch = ckB.checked; });
+
+  /* 点扫描带 → 切到对应光路 */
+  cvCone.addEventListener('click', function(ev){
+    var r = cvCone.getBoundingClientRect();
+    var W = r.width, x0 = 78, x1 = W - 18;
+    var a = A0 + (ev.clientX - r.left - x0)/(x1 - x0)*(A1 - A0);
+    if(a < A0 || a > A1) return;
+    var res = trace(a, 8);
+    setMode(res.hits === 0 ? (res.term === '逃出场景' ? 'me' : 'm0')
+      : (res.hits === 1 ? 'm1' : (res.hits === 2 ? 'm2' : 'm3')));
+  });
+
+  function loop(){
+    draw();
+    drawCone();
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+  onResize(function(){ draw(); drawCone(); });
+  setMode('m0');
+})();
+
+/* =====================================================================
+   侧栏滚动高亮
+   ===================================================================== */
+(function(){
+  var links = $$('.toc a');
+  var secs = links.map(function(a){ return document.querySelector(a.getAttribute('href')); });
+  function upd(){
+    var y = window.scrollY + 120, best = 0;
+    for(var i=0;i<secs.length;i++){
+      if(secs[i] && secs[i].offsetTop <= y) best = i;
+    }
+    links.forEach(function(a,i){ a.className = (i===best) ? 'on' : ''; });
+  }
+  window.addEventListener('scroll', upd, {passive:true});
+  upd();
+})();
+</script>
+</body>
+</html>

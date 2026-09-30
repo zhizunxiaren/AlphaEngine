@@ -12,7 +12,7 @@ related:
   - "[[90-System/LLM-Wiki-Obsidian]]"
   - "[[20-Knowledge/00-Knowledge-MOC]]"
   - "[[30-Sources/00-Sources-MOC]]"
-updated: 2026-09-19
+updated: 2026-09-23
 tags:
   - obsidian
   - documentation
@@ -32,8 +32,18 @@ tags:
 | `20-Knowledge/` | `moc`、`decision`、`concept`、`glossary`、`tooling` |
 | `30-Sources/` | `source` 与 Sources MOC |
 | `90-System/` | `guide`、`log` 等系统维护文档 |
+| `demos/` | **非笔记资产**：自包含的单文件教学演示页（`<目录>/index.html`）及其校验脚手架。不收笔记，见第 1.1 节 |
 
 目录编号只用于稳定排序。语义导航必须通过 [[00-Home]]、各层 MOC 与 Backlinks 完成。
+
+### 1.1 非笔记资产：`demos/`
+
+`demos/` 存放可直接在浏览器打开、不参与文档编译的交互演示页。它是**知识层的附着物**，不是第五层：
+
+- 每个演示页以**目录**为单位组织，入口固定为 `index.html`；同目录下的 `_*.js` / `verify.*.js` 是它的校验脚手架，随页面一起纳管。
+- 演示页**不写 Properties、不参与 MOC 语义网络**，因此不需要满足「每份活跃笔记必须可从 [[00-Home]] 到达」。
+- 每个演示页由 `20-Knowledge/Tooling/` 下的一条 `tooling` 笔记登记（当前为 [[20-Knowledge/Tooling/教学演示页]]），该笔记负责清单、与 Concept 页的映射和校验约定。
+- **演示页不承载结论**：它引用 Concept 页的结论，反过来不被 Outcomes 引用。演示页里的实现是「为了看见中间状态」而写的讲解代码，不构成引擎架构或技术栈决策。
 
 ## 2. Properties
 
@@ -65,6 +75,7 @@ tags:
 
 - Vault 内笔记统一使用 `\[\[Wiki Link\]\]`；需要别名时使用 `\[\[目标|显示名\]\]`。
 - 外部网页和 Vault 外文件使用普通 Markdown link。
+- `demos/` 下的演示页是**非笔记资产**，用普通 Markdown link 指向具体入口（例：`[光栅化演示](demos/rasterization/index.html)`），**不要**写成 WikiLink —— 它不是笔记，写成 WikiLink 会制造一个永远无法解析的目标。
 - 每份活跃笔记必须可从 [[00-Home]] 沿 Wiki Link 到达。
 - 成果链接 Knowledge，Knowledge 链接 Sources；使用 Backlinks 查看反向影响。
 - 链接到标题时使用 `\[\[笔记#标题|显示名\]\]`，避免复制同一段内容。
@@ -76,6 +87,7 @@ tags:
 - 术语 → [[20-Knowledge/Glossary]]
 - 选择理由 → `20-Knowledge/Decisions/`
 - 可复用技术解释 → `20-Knowledge/Concepts/`
+- 演示资产清单与校验约定 → [[20-Knowledge/Tooling/教学演示页]]
 - 外部事实 → [[30-Sources/00-Sources-MOC|Sources]] 下的来源卡片
 
 同一结论只在 owner note 定义一次。其他笔记用 Wiki Link 引用，并只补充本页面独有的理由、推导或证据。

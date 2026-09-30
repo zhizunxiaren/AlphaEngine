@@ -10,7 +10,7 @@ parent: "[[00-Home]]"
 related:
   - "[[10-Outcomes/10-AlphaEngine]]"
   - "[[90-System/LLM-Wiki-Obsidian]]"
-updated: 2026-09-17
+updated: 2026-09-23
 tags:
   - moc
   - reference
@@ -42,6 +42,7 @@ tags:
 ## 工具与约定
 
 - [[20-Knowledge/Tooling/第三方依赖引入|第三方依赖引入约定]] —— 依赖引入三步流程、`third_party` 目录与修改约定、单头文件库接入方式、风险登记。
+- [[20-Knowledge/Tooling/教学演示页|教学演示页]] —— `docs/demos/` 两页（光线追踪 / 光栅化）的清单、与三个 Concept 页的映射、四层校验约定（静态 / 独立 / 负向 / 冒烟）与「每条断言都要有能触发它的缺陷」规则。**演示资产，不构成 Outcomes 结论。**
 
 ## 上游与下游
 

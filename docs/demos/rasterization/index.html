@@ -1,0 +1,2906 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>光栅化 · 可视化拆解（从边缘函数到 G-Buffer）</title>
+<style>
+:root{
+  --bg:#f4f5f8; --card:#ffffff; --ink:#16191f; --muted:#6b7280; --line:#e4e7ec;
+  --accent:#5450d8; --accent-soft:#eeedfd; --teal:#0e9384; --teal-soft:#e6f6f4;
+  --amber:#b45309; --amber-soft:#fdf3e3; --rose:#be123c; --rose-soft:#fdeef2;
+  --vp:#0c1017; --vp2:#141a23;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth; scroll-padding-top:20px}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font:15px/1.8 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{display:grid; grid-template-columns:216px minmax(0,1fr); gap:40px;
+  max-width:1180px; margin:0 auto; padding:32px 24px 140px;}
+@media (max-width:920px){
+  .wrap{grid-template-columns:1fr; gap:0; padding:18px 14px 90px}
+  .toc{display:none}
+}
+
+/* ---------- 侧栏 ---------- */
+.toc{position:sticky; top:24px; align-self:start; max-height:calc(100vh - 48px); overflow:auto}
+.toc h4{margin:0 0 10px; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); font-weight:700}
+.toc a{display:block; padding:6px 10px; margin:1px 0; border-radius:7px; color:#4b5563;
+  text-decoration:none; font-size:13.5px; line-height:1.5; border-left:2px solid transparent}
+.toc a:hover{background:#e9eaf0; color:var(--ink)}
+.toc a.on{background:var(--accent-soft); color:var(--accent); border-left-color:var(--accent); font-weight:600}
+
+/* ---------- 头部 ---------- */
+.hero{background:linear-gradient(140deg,#12172a 0%,#152a3d 55%,#0f3330 100%);
+  border-radius:18px; padding:34px 34px 30px; color:#eef0ff; margin-bottom:30px; position:relative; overflow:hidden}
+.hero::after{content:""; position:absolute; right:-60px; top:-60px; width:280px; height:280px;
+  border-radius:50%; background:radial-gradient(circle,rgba(80,220,200,.34),transparent 68%)}
+.hero .kicker{font:600 11px/1 var(--mono); letter-spacing:.2em; text-transform:uppercase; color:#7ee0d0}
+.hero h1{margin:14px 0 10px; font-size:31px; line-height:1.25; letter-spacing:-.01em}
+.hero p{margin:0; color:#b9c6d6; font-size:15px; max-width:660px}
+.hero .meta{margin-top:20px; display:flex; flex-wrap:wrap; gap:8px}
+.hero .meta span{font:500 12px/1 var(--mono); background:rgba(255,255,255,.09);
+  border:1px solid rgba(255,255,255,.13); padding:6px 11px; border-radius:999px; color:#c8d0e0}
+.hero a{color:#7ee0d0}
+
+/* ---------- 区块 ---------- */
+section{margin:0 0 26px}
+.sec-h{display:flex; align-items:center; gap:12px; margin:0 0 14px}
+.sec-h .no{flex:0 0 auto; width:30px; height:30px; border-radius:9px; background:var(--accent);
+  color:#fff; font:700 14px/30px var(--mono); text-align:center}
+.sec-h h2{margin:0; font-size:20.5px; letter-spacing:-.01em}
+.card{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:22px 24px;
+  box-shadow:0 1px 2px rgba(16,24,40,.04)}
+.card + .card{margin-top:14px}
+p{margin:10px 0}
+.muted{color:var(--muted)}
+code{font:13px/1.6 var(--mono); background:#eef0f4; padding:1.5px 6px; border-radius:5px; color:#3b3f52}
+
+/* ---------- 提示块 ---------- */
+.note{border-radius:11px; padding:14px 17px 14px 44px; margin:14px 0; position:relative; font-size:14.5px; line-height:1.75}
+.note::before{position:absolute; left:15px; top:13px; font-size:16px}
+.note b{font-weight:700}
+.note.i{background:var(--accent-soft); border-left:3px solid var(--accent)}
+.note.i::before{content:"💡"}
+.note.w{background:var(--amber-soft); border-left:3px solid var(--amber)}
+.note.w::before{content:"⚠️"}
+.note.t{background:var(--teal-soft); border-left:3px solid var(--teal)}
+.note.t::before{content:"✅"}
+.note.r{background:var(--rose-soft); border-left:3px solid var(--rose)}
+.note.r::before{content:"🚫"}
+
+/* ---------- 公式 ---------- */
+.eq{font:15px/2.1 var(--mono); background:#f0f1f6; border:1px solid #e2e4ec; border-radius:10px;
+  padding:14px 18px; margin:13px 0; overflow-x:auto; white-space:nowrap; color:#2c3040}
+.eq .hl{background:#fff3b8; border-radius:4px; padding:2px 5px; color:#7a4b00; font-weight:600}
+.eq .cm{color:#8a90a6}
+.eq .op{color:#7c3aed}
+.eq .bad{background:#fdeef2; color:#be123c; border-radius:4px; padding:2px 5px; font-weight:600}
+
+/* ---------- 控件 ---------- */
+.ctl{display:flex; flex-wrap:wrap; align-items:center; gap:9px 16px;
+  background:#f7f8fb; border:1px solid var(--line); border-radius:11px; padding:12px 15px; margin:14px 0; font-size:13.5px}
+.ctl label{display:flex; align-items:center; gap:7px; color:#454b5c; font-weight:500}
+.ctl input[type=range]{width:112px; accent-color:var(--accent)}
+.ctl select{font:inherit; font-size:13px; padding:5px 9px; border:1px solid #d3d7e0;
+  border-radius:7px; background:#fff; color:var(--ink)}
+.ctl label.wl{color:var(--rose); font-weight:600}
+.ctl label.wl input{accent-color:var(--rose)}
+button.btn{font:inherit; font-size:13.5px; font-weight:600; padding:7px 15px; border-radius:8px;
+  border:1px solid var(--accent); background:var(--accent); color:#fff; cursor:pointer}
+button.btn:hover{filter:brightness(1.08)}
+button.btn.ghost{background:#fff; color:var(--accent)}
+button.btn.ghost:hover{background:var(--accent-soft)}
+button.btn.ghost.on{background:var(--accent); color:#fff; border-color:var(--accent)}
+button.btn.warn{border-color:var(--rose); background:#fff; color:var(--rose)}
+button.btn.warn.on{background:var(--rose); color:#fff}
+.val{font:600 13px var(--mono); color:var(--accent); min-width:34px; display:inline-block}
+.pill{font:600 12px var(--mono); background:#e8eaf2; border-radius:6px; padding:3px 8px; color:#454b62}
+.pill.bad{background:var(--rose-soft); color:var(--rose)}
+.pill.ok{background:var(--teal-soft); color:var(--teal)}
+
+canvas{display:block; width:100%; border-radius:11px}
+.vpcanvas{background:var(--vp); border:1px solid #232b38}
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+@media (max-width:820px){.grid2{grid-template-columns:1fr}}
+.h300{height:300px} .h260{height:260px} .h360{height:360px}
+.h220{height:220px} .h420{height:420px} .h200{height:200px} .h140{height:140px}
+@media (max-width:820px){.h300,.h360,.h420{height:250px}}
+
+.cap{font-size:12.5px; color:var(--muted); margin-top:8px; text-align:center}
+
+/* ---------- 读数表 ---------- */
+.read{display:grid; grid-template-columns:repeat(auto-fit,minmax(118px,1fr)); gap:8px; margin-top:12px}
+.read div{background:#f5f6fa; border:1px solid #e7e9f0; border-radius:9px; padding:8px 11px}
+/* 注意：不加 text-transform:uppercase —— 这里的标签是数学变量名（E/λ/w/z），大写会改变符号含义 */
+.read .k{font:600 10.5px var(--mono); letter-spacing:.06em; color:#8b91a4}
+.read .v{font:600 14.5px var(--mono); margin-top:3px; color:#232838}
+.read .v.ok{color:var(--teal)} .read .v.no{color:var(--rose)}
+
+table{width:100%; border-collapse:collapse; margin:14px 0; font-size:14px}
+th,td{text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+th{background:#f4f5fa; font-weight:700; font-size:12.5px; letter-spacing:.03em; color:#4a5164}
+tr:last-child td{border-bottom:none}
+td.mono,th.mono{font-family:var(--mono); font-size:13px}
+.tag{display:inline-block; font:600 11px var(--mono); padding:2px 7px; border-radius:5px; background:#eceef5; color:#4a5164}
+
+.legend{display:flex; flex-wrap:wrap; gap:8px 18px; margin-top:10px; font-size:13px; color:#4b5163}
+.legend i{display:inline-block; width:11px; height:11px; border-radius:3px; margin-right:6px; vertical-align:-1px}
+
+/* ---------- 左右对照分屏 ---------- */
+.vs{display:grid; grid-template-columns:1fr 1fr; gap:2px; background:#232b38;
+  border:1px solid #232b38; border-radius:11px; overflow:hidden}
+.vs > div{min-width:0}
+.vs canvas{border-radius:0; border:none}
+.vs .h{font:600 12px var(--mono); padding:6px 10px; background:#1b2230; color:#cbd2e0; text-align:center}
+.vs .h.bad{background:#2c1620; color:#f2aec2}
+@media (max-width:820px){.vs{grid-template-columns:1fr}}
+
+/* ---------- 常见错误清单 ---------- */
+.traps{display:grid; grid-template-columns:repeat(auto-fit,minmax(228px,1fr)); gap:10px; margin-top:12px}
+.trap{background:#fff; border:1px solid var(--line); border-left:3px solid var(--rose);
+  border-radius:10px; padding:11px 14px; cursor:pointer; transition:background .18s ease}
+.trap:hover{background:var(--rose-soft)}
+.trap h5{margin:0 0 4px; font-size:13.5px; color:#232838}
+.trap p{margin:0; font-size:12.5px; color:var(--muted); line-height:1.6}
+.trap .go{font:600 12px var(--mono); color:var(--accent); margin-top:6px; display:block}
+
+footer{margin-top:40px; padding-top:20px; border-top:1px solid var(--line); color:var(--muted); font-size:13.5px}
+footer ul{margin:8px 0; padding-left:20px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="toc">
+  <h4>目录</h4>
+  <a href="#s0">先给结论</a>
+  <a href="#s1">① 谁去找谁</a>
+  <a href="#s2">② 三角形与投影</a>
+  <a href="#s3">③ 边缘函数与重心坐标</a>
+  <a href="#s4">④ 覆盖范围收缩</a>
+  <a href="#s5">⑤ 填充规则与水密性</a>
+  <a href="#s6">⑥ 深度缓冲</a>
+  <a href="#s7">⑦ 透视校正插值</a>
+  <a href="#s8">⑧ 背面剔除</a>
+  <a href="#s9">⑨ 着色频率</a>
+  <a href="#s10">⑩ 抗锯齿 MSAA</a>
+  <a href="#s11">⑪ 两条路的合流</a>
+</nav>
+
+<main>
+
+<div class="hero">
+  <div class="kicker">Rasterization Pipeline</div>
+  <h1>光栅化，到底在干什么</h1>
+  <p>一句话：<b>把三角形推到屏幕上，问它盖住了哪些像素。</b>和光线追踪的方向正好相反——
+     光栅化以几何为起点，光线追踪以像素为起点。下面每一节都有一个可以动手改的演示，
+     并且每一节都带一个<b>「常见错误写法」开关</b>：打开它，你会看到那个错误在屏幕上长什么样。</p>
+  <div class="meta">
+    <span>纯 CPU 软件光栅化 · 无依赖</span>
+    <span>11 节 · 逐像素可验证</span>
+    <span>与 docs/20-Knowledge 术语对齐</span>
+  </div>
+</div>
+
+<!-- ================= §0 ================= -->
+<section id="s0">
+  <div class="sec-h"><div class="no">0</div><h2>先给结论</h2></div>
+  <div class="card">
+    <p>光栅化问的是：<b>「这个三角形覆盖了哪些像素？」</b>——以物体为起点，往屏幕推。</p>
+    <p>光线追踪问的是：<b>「这个像素看到了什么？」</b>——以像素为起点，往场景里追。</p>
+    <p>方向反过来之后，代价与收益同时反向：</p>
+    <table>
+      <tr><th style="width:30%">维度</th><th>光栅化</th><th>光线追踪</th></tr>
+      <tr><td><b>遍历方向</b></td><td>三角形 → 像素</td><td>像素 → 三角形</td></tr>
+      <tr><td><b>工作量</b></td><td>正比于<b>被覆盖的像素数</b>（与屏幕大小无关）</td><td>正比于<b>像素数</b>（与屏幕大小成正比）</td></tr>
+      <tr><td><b>阴影 / 反射 / 间接光</b></td><td>需要额外技术和多趟渲染，天然做不好</td><td>再发一条光线就行，天然免费</td></tr>
+      <tr><td><b>局部性与并行</b></td><td>写入连贯、访存友好，硬件流水线极其高效</td><td>访存散乱、分支发散，靠大规模并行摊平</td></tr>
+    </table>
+    <div class="note i"><b>为什么实时渲染选了光栅化：</b>工作量只看「屏幕上有多少像素被盖住」，
+      与场景里有多少三角形<b>无关</b>。摄像机拉远，三角形变小，填充成本随之下降——
+      这是唯一能在毫秒预算内稳定交付的遍历顺序。代价是它只知道「这一个像素被谁盖住」，
+      而不知道「这个像素还应该看到什么」。§11 会讲现代渲染器怎么把两者合起来用。</div>
+  </div>
+</section>
+
+<!-- ================= §1 ================= -->
+<section id="s1">
+  <div class="sec-h"><div class="no">1</div><h2>谁去找谁：两种遍历顺序</h2></div>
+  <div class="card">
+    <p>下面左右两边是<b>同一个场景、同一块屏幕、同一份输出图像</b>。唯一差别是到达的方式：
+      左边以三角形为循环外层，右边以像素为循环外层。注意看两边最后落在缓冲里的像素——
+      <b>结果完全一样</b>。</p>
+    <div class="grid2" style="margin-top:14px">
+      <div>
+        <canvas id="cv-fork-tri" class="vpcanvas h300"></canvas>
+        <div class="cap">光栅化：外层 <code>for 三角形</code> → 内层 <code>for 像素</code></div>
+      </div>
+      <div>
+        <canvas id="cv-fork-pix" class="vpcanvas h300"></canvas>
+        <div class="cap">光线追踪：外层 <code>for 像素</code> → 内层 <code>for 三角形</code></div>
+      </div>
+    </div>
+    <div class="ctl">
+      <button class="btn" id="btn-fork">重新播放</button>
+      <span class="pill" id="pf-fork">进度 —</span>
+    </div>
+    <div class="read" id="rd-fork">
+      <div><div class="k">屏幕像素 P</div><div class="v" id="fk-p">—</div></div>
+      <div><div class="k">三角形 T</div><div class="v" id="fk-t">—</div></div>
+      <div><div class="k">光线追踪最坏求交次数 P×T</div><div class="v no" id="fk-rt">—</div></div>
+      <div><div class="k">光栅化实际覆盖像素数</div><div class="v ok" id="fk-ras">—</div></div>
+      <div><div class="k">比值</div><div class="v" id="fk-ratio">—</div></div>
+    </div>
+    <div class="note w"><b>注意这里的对比不是「谁快」的严格结论。</b>光线追踪有加速结构（BVH），
+      最坏情况的 <code>P×T</code> 在实践中不会发生；而光栅化在模型过密、屏幕上三角形极小时
+      也会退化。真正的结构性差别是<b>伸缩方向</b>：光栅化随覆盖像素数伸缩，
+      光线追踪随采样数伸缩。</div>
+  </div>
+</section>
+
+<!-- ================= §2 ================= -->
+<section id="s2">
+  <div class="sec-h"><div class="no">2</div><h2>三角形与投影：从世界到像素</h2></div>
+  <div class="card">
+    <p>光栅化只认一种图元：<b>三角形</b>。理由有三条，缺一条它都站不住——</p>
+    <ol>
+      <li><b>三点必然共面。</b>四边形及以上不保证共面，不共面就没有唯一的内部插值。</li>
+      <li><b>三点能唯一定义一个仿射插值。</b>平面上的重心坐标唯一，属性沿面插值不会二义。</li>
+      <li><b>任何多边形都能三角化。</b>而三角形的边天然是直线，硬件只需要处理直线。</li>
+    </ol>
+    <p>从世界空间到屏幕像素，要过<b>四道</b>变换。第四道容易被忽略，但它正是 §7 全部麻烦的来源：</p>
+    <div class="eq">
+      世界 <span class="op">→</span> 观察 <span class="op">→</span> 裁剪 <span class="op">→</span> <span class="hl">透视除法 ÷ w</span> <span class="op">→</span> 视口变换 <span class="op">→</span> 像素坐标
+    </div>
+    <div class="grid2" style="margin-top:14px">
+      <div>
+        <canvas id="cv-proj-3d" class="vpcanvas h300"></canvas>
+        <div class="cap">观察空间：三角形在三维里，每个顶点带一个 <code>w = −z</code></div>
+      </div>
+      <div>
+        <canvas id="cv-proj-2d" class="vpcanvas h300"></canvas>
+        <div class="cap">屏幕空间：除以 <code>w</code> 之后，三维信息只剩 <code>x/w, y/w, z/w, 1/w</code></div>
+      </div>
+    </div>
+    <div class="ctl">
+      <label>绕 Y 轴旋转 <input type="range" id="r-proj-rot" min="-60" max="60" value="24" step="0.5"><span class="val" id="v-proj-rot">24°</span></label>
+      <label>视距 <input type="range" id="r-proj-dist" min="3" max="14" value="7" step="0.1"><span class="val" id="v-proj-dist">7.0</span></label>
+    </div>
+    <div class="read">
+      <div><div class="k">顶点 w（近→远）</div><div class="v" id="pj-w">—</div></div>
+      <div><div class="k">近端 / 远端 w 比</div><div class="v" id="pj-wratio">—</div></div>
+      <div><div class="k">投影后面积 / 世界面积</div><div class="v" id="pj-shrink">—</div></div>
+    </div>
+    <div class="note w"><b>透视除法是唯一不可逆的一步。</b>它把 (x, y, z, w) 压成 (x/w, y/w, z/w) ——
+      三个数。也就是说，<b>除以 w 之后，屏幕上一个点对「它原来在近处还是远处」只剩下 <code>1/w</code> 这一条线索</b>。
+      §6 与 §7 两节的全部内容，都是这一条线索的直接推论。</div>
+  </div>
+</section>
+
+<!-- ================= §3 ================= -->
+<section id="s3">
+  <div class="sec-h"><div class="no">3</div><h2>边缘函数与重心坐标</h2></div>
+  <div class="card">
+    <p>「这个点在不在这条边的内侧？」——这是光栅化里被问得最多的问题。答案只需要一次叉积。
+      对边 <code>a→b</code> 和点 <code>p</code>：</p>
+    <div class="eq">E<sub>ab</sub>(p) = (b − a) × (p − a) = (b.x−a.x)(p.y−a.y) − (b.y−a.y)(p.x−a.x)</div>
+    <p>它的绝对值是<b>两倍</b>的三角形面积 <code>a→b→p</code>，符号则告诉你 <code>p</code> 在边的哪一侧。
+      于是判定「在三角形内」就是你早就知道的那条规则：</p>
+    <div class="note t"><b>三条边同号 ⇔ 点在三角形内部。</b>这一条对两种绕序都成立——
+      顺时针时三个结果全为负，逆时针时全为正，只要<b>同号</b>就在内部，一个 <code>if</code> 都不用加。</div>
+    <p>真正关键的一步在这里：把三个边缘函数<b>除以它们的和</b>，得到的就是重心坐标。</p>
+    <div class="eq">
+      λ<sub>0</sub> = <span class="hl">E<sub>12</sub> / (E<sub>12</sub>+E<sub>20</sub>+E<sub>01</sub>)</span>　
+      λ<sub>1</sub> = E<sub>20</sub> / Σ　
+      λ<sub>2</sub> = E<sub>01</sub> / Σ　
+      <span class="cm">Σ = 2·Area</span>
+    </div>
+    <div class="note i"><b>为什么要归一化：</b>和 <code>Σ</code> 就是三角形<b>两倍面积</b>。
+      不除它，三个边缘函数是「有量纲的面积」，是绝对量；除完之后才是「与位置无关的权重」，
+      可以直接拿来插值 —— 这一条很重要，因为 §7 的常见错误写法正是<b>忘了除</b>。</div>
+    <div class="ctl">
+      <label>显示 <select id="sel-edge">
+        <option value="sign">三个边缘函数的符号场</option>
+        <option value="bary">重心坐标 λ 的等值线</option>
+        <option value="area">面积解释：E/2 = 子三角形面积</option>
+      </select></label>
+      <label class="wl"><input type="checkbox" id="cb-edge-wrong"> 常见错误：不归一化，直接用边缘函数值当权重</label>
+      <button class="btn ghost" id="btn-edge-reset">重置三角形</button>
+    </div>
+    <canvas id="cv-edge" class="vpcanvas h360"></canvas>
+    <div class="cap">拖动三个顶点，再在三角形内移动鼠标 —— 读数会实时更新</div>
+    <div class="read">
+      <div><div class="k">鼠标处 E01 / E12 / E20</div><div class="v" id="ed-E">—</div></div>
+      <div><div class="k">Σ = E12+E20+E01（= 2·Area）</div><div class="v" id="ed-S">—</div></div>
+      <div><div class="k">重心坐标 λ0 / λ1 / λ2</div><div class="v" id="ed-lam">—</div></div>
+      <div><div class="k">λ 之和</div><div class="v ok" id="ed-sum">—</div></div>
+      <div><div class="k">插值结果（取顶点色 R）</div><div class="v" id="ed-interp">—</div></div>
+      <div><div class="k">不归一化时的插值结果</div><div class="v no" id="ed-interpbad">—</div></div>
+    </div>
+    <div class="note r"><b>常见错误：直接把边缘函数值当权重。</b>打开上面的开关就会看到，
+      插值结果会随三角形面积整体缩放 —— 面积变成 100 倍，颜色就溢出到 100 倍。
+      这个错误在「恰好单位面积」的测试三角形上<b>完全看不出来</b>，所以它特别容易溜进代码。</div>
+  </div>
+</section>
+
+<!-- ================= §4 ================= -->
+<section id="s4">
+  <div class="sec-h"><div class="no">4</div><h2>覆盖范围收缩：别去测不该问的像素</h2></div>
+  <div class="card">
+    <p>有了「点在三角形内」的判据，最朴素的做法就是<b>对屏幕上每一个像素都问一遍</b>。
+      这在 640×320 上已经要问 20 万次，而对一个只盖住 3% 屏幕的三角形来说，其中 97% 是白问的。
+      硬件当然不这么干，它做两级收缩：</p>
+    <table>
+      <tr><th style="width:22%">策略</th><th>做法</th><th style="width:26%">测试次数</th></tr>
+      <tr><td><b>全屏遍历</b></td><td>对每个像素问一遍</td><td class="mono">W × H</td></tr>
+      <tr><td><b>包围盒</b></td><td>只遍历三角形投影的轴对齐外接矩形</td><td class="mono">≤ W × H，通常小得多</td></tr>
+      <tr><td><b>扫描线</b></td><td>逐行求出该行与三角形相交的 x 区间，只测区间内</td><td class="mono">≈ 覆盖像素数 + 每行两次求交</td></tr>
+    </table>
+    <div class="ctl">
+      <label>策略 <select id="sel-cover">
+        <option value="full">全屏遍历</option>
+        <option value="bbox">包围盒</option>
+        <option value="scan" selected>扫描线</option>
+      </select></label>
+      <button class="btn ghost" id="btn-cover-reset">重置三角形</button>
+      <span class="pill" id="pf-cover">拖动顶点</span>
+    </div>
+    <canvas id="cv-cover" class="vpcanvas h300"></canvas>
+    <div class="cap">亮色像素 = 真正被测试过的像素；绿 = 覆盖，暗红 = 测了但没通过</div>
+    <div class="read">
+      <div><div class="k">屏幕像素 W×H</div><div class="v" id="cv-total">—</div></div>
+      <div><div class="k">实际测试</div><div class="v" id="cv-tested">—</div></div>
+      <div><div class="k">包围盒面积</div><div class="v" id="cv-bbox">—</div></div>
+      <div><div class="k">最终覆盖</div><div class="v ok" id="cv-hit">—</div></div>
+      <div><div class="k">测试 / 覆盖</div><div class="v" id="cv-eff">—</div></div>
+      <div><div class="k">包围盒 / 屏幕</div><div class="v" id="cv-bbratio">—</div></div>
+    </div>
+    <div class="note w"><b>扫描线看起来总是最优，但硬件几乎不这么做。</b>逐行求交意味着每个三角形
+      都要走一个带分支的顺序循环，而 GPU 要的是「一批像素同时做同一件事」。
+      真实的硬件走的是<b>包围盒 + 分块（tile）</b>：把屏幕切成小块，每块维护一个三角形列表，
+      块内再暴力测试。所以下面这个计数器真正想让你看到的是<b>测试次数与覆盖像素数的比值</b>——
+      它才是衡量图元效率的量。</div>
+  </div>
+</section>
+
+<!-- ================= §5 ================= -->
+<section id="s5">
+  <div class="sec-h"><div class="no">5</div><h2>填充规则与水密性：为什么共享边是个问题</h2></div>
+  <div class="card">
+    <p>把两个三角形拼成一个四边形，它们<b>共享一条边</b>。现在设想这条边正好落在像素中心上——
+      边界上的这个像素该归谁？</p>
+    <div class="note r"><b>两个都不能选，也两个都不能不选。</b>
+      如果两个都填，这个像素被写了两次（在开启混合时会重复累积，产生一条亮线）；
+      如果两个都不填，就会留下一条<b>一像素宽的裂缝</b>，背景从缝里透出来。
+      只要有一点缝隙，所谓「无缝拼接的网格」就是假的 —— 这就是<b>水密性（watertightness）</b>问题。</p>
+    <p>工业界的解法是 <b>top-left 规则</b>：把所有三角形的边分成「顶边 / 左边」和「底边 / 右边」两类，
+      规定<b>边界上的像素只属于顶边和左边</b>。这样任意一条内部边，在它两侧的两个三角形眼里，
+      必然一个是「左边」另一个是「右边」，于是归属唯一。</p>
+    <div class="eq">
+      一条边是 <span class="hl">top</span> 边 ⟺ 它是水平的且<b>指向左</b>（dx &lt; 0）　　<span class="cm">屏幕 y 朝下</span><br>
+      一条边是 <span class="hl">left</span> 边 ⟺ 它<b>不水平且指向下</b>（dy &gt; 0）<br>
+      边界像素（E = 0）<span class="op">→</span> 只有当这条边是 top 或 left 时才接受
+    </div>
+    <div class="ctl">
+      <label>边界归属 <select id="sel-fill-rule">
+        <option value="tl" selected>top-left 规则（正确）</option>
+        <option value="all">边界一律接受（错误：重复覆盖）</option>
+        <option value="none">边界一律拒绝（错误：裂缝）</option>
+      </select></label>
+      <label>放大倍率 <input type="range" id="r-fill-zoom" min="6" max="40" value="18" step="1"><span class="val" id="v-fill-zoom">18×</span></label>
+    </div>
+    <canvas id="cv-fill" class="vpcanvas h300"></canvas>
+    <div class="cap">两个三角形共享一条对角边 + 共享一条水平边；右侧是共享边中点的像素级放大</div>
+    <div class="read">
+      <div><div class="k">被覆盖 0 次的内部像素</div><div class="v" id="fl-zero">—</div></div>
+      <div><div class="k">被覆盖 2 次的内部像素</div><div class="v" id="fl-two">—</div></div>
+      <div><div class="k">被覆盖 1 次的内部像素</div><div class="v ok" id="fl-one">—</div></div>
+      <div><div class="k">水密性判定</div><div class="v" id="fl-verdict">—</div></div>
+    </div>
+    <div class="note t"><b>判定标准：</b>把两个三角形的覆盖次数加起来，
+      内部像素必须<b>恰好等于 1</b>。出现 0 就是裂缝，出现 2 就是重复着色 ——
+      这两个计数器是水密性的唯一客观判据，肉眼在缩放不到像素级时根本看不出来。</div>
+  </div>
+</section>
+
+<!-- ================= §6 ================= -->
+<section id="s6">
+  <div class="sec-h"><div class="no">6</div><h2>深度缓冲：为什么不排序也能画对</h2></div>
+  <div class="card">
+    <p>有了覆盖判定，下一个问题是<b>遮挡</b>：同一个像素被多个三角形盖住，谁在前面？
+      画家算法（先画远的、再画近的）听起来可行，但它解决不了三个情况：
+      <b>互相穿插</b>的三角形、<b>循环遮挡</b>、以及<b>摄像机一动就要重排</b>。
+      硬件用的是更笨但更稳的办法：<b>每个像素存一个当前最近深度</b>，画的时候逐个比较。</p>
+    <div class="eq">
+      <span class="cm">// 逐像素、逐三角形，顺序无关</span><br>
+      if (z<sub>new</sub> &lt; z<sub>buf</sub>[i]) { z<sub>buf</sub>[i] = z<sub>new</sub>; color[i] = shade(...); }
+    </div>
+    <p>这一句的正确性依赖一个不太显然的事实：<b>深度可以放心地用屏幕空间重心坐标直接线性插值。</b>
+      推导只有两步：</p>
+    <div class="eq">
+      ① 观察空间里，平面上的量沿三角形线性 ⇒ <span class="hl">1/w 在屏幕空间是线性的</span><br>
+      ② 投影后 z<sub>ndc</sub> = A + B·(1/w) ⇒ <span class="hl">z<sub>ndc</sub> 是 1/w 的仿射函数 ⇒ 在屏幕空间也是线性的</span>
+    </div>
+    <div class="note t"><b>结论：深度不需要透视校正，而顶点属性需要（§7）。</b>
+      这不是「硬件偷懒」，而是数学上<b>恰好成立</b>的 —— 深度和属性在屏幕空间的线性性质根本不同。
+      把这两件事搞混是这一节最容易犯的错。</div>
+    <div class="ctl">
+      <label>深度测试 <select id="sel-depth">
+        <option value="ztest" selected>开启（正确）</option>
+        <option value="off">关闭（常见错误：按绘制顺序覆盖）</option>
+        <option value="world">用世界空间重心坐标插深度（常见错误）</option>
+      </select></label>
+      <label><input type="checkbox" id="cb-reverse-z"> 反向深度 (reverse-Z)</label>
+      <label>近平面 near <input type="range" id="r-near" min="0.1" max="3" value="0.5" step="0.05"><span class="val" id="v-near">0.5</span></label>
+      <label>远平面 far <input type="range" id="r-far" min="20" max="600" value="120" step="5"><span class="val" id="v-far">120</span></label>
+    </div>
+    <div class="grid2">
+      <div>
+        <canvas id="cv-depth" class="vpcanvas h300"></canvas>
+        <div class="cap">渲染结果；右下角小窗是深度缓冲的可视化（越亮越远）</div>
+      </div>
+      <div>
+        <canvas id="cv-zchart" class="vpcanvas h300"></canvas>
+        <div class="cap">深度值随世界距离（线性轴）的分布 —— 曲线是双曲的，刻度是均匀的</div>
+      </div>
+    </div>
+    <div class="read">
+      <div><div class="k">z_ndc 的解析式</div><div class="v" id="dp-formula">—</div></div>
+      <div><div class="k">near 处相邻深度间隔</div><div class="v ok" id="dp-near">—</div></div>
+      <div><div class="k">far 处相邻深度间隔</div><div class="v no" id="dp-far">—</div></div>
+      <div><div class="k">near / far 精度比</div><div class="v" id="dp-ratio">—</div></div>
+      <div><div class="k">near/far 比 (far−near)</div><div class="v" id="dp-nf">—</div></div>
+    </div>
+    <div class="note i"><b>为什么 <code>near</code> 比 <code>far</code> 重要得多：</b>上面两个「间隔」读数就是答案。
+      深度缓冲的精度分布是双曲的——把 near 从 0.5 推到 0.1，远处精度几乎不变，近处精度改善一个数量级。
+      而 <code>reverse-Z</code> 把存的值换成 <code>1 − z</code>，配合浮点数的指数分布，
+      正好抵消掉这个双曲性，让精度接近均匀。<b>这就是现代 GPU 普遍默认反向深度的原因。</b></div>
+  </div>
+</section>
+
+<!-- ================= §7 ================= -->
+<section id="s7">
+  <div class="sec-h"><div class="no">7</div><h2>透视校正插值：PS1 那种纹理扭动是怎么来的</h2></div>
+  <div class="card">
+    <p>回到 §3。我们用边缘函数算出的重心坐标 <code>λ</code>，是<b>屏幕空间</b>的权重。
+      用它插值屏幕上的位置是绝对正确的 —— 但用它插值<b>世界空间</b>的量（纹理坐标、法线、颜色），
+      就是错的。原因藏在 §2 那一步透视除法里。</p>
+    <div class="eq">
+      屏幕空间线性的是 <span class="hl">attr / w</span> 和 <span class="hl">1 / w</span>，<b>不是</b> attr 本身。<br>
+      <span class="bad">错误</span>　attr = λ<sub>0</sub>·attr<sub>0</sub> + λ<sub>1</sub>·attr<sub>1</sub> + λ<sub>2</sub>·attr<sub>2</sub>　　<span class="cm">（仿射插值）</span><br>
+      <span class="hl">正确</span>　λ′<sub>i</sub> = (λ<sub>i</sub> / w<sub>i</sub>) / Σ(λ<sub>j</sub> / w<sub>j</sub>)　<span class="op">→</span>　attr = Σ λ′<sub>i</sub>·attr<sub>i</sub>
+    </div>
+    <div class="note i"><b>等价的说法（硬件实际做的事）：</b>把 <code>attr/w</code> 和 <code>1/w</code>
+      两个通道都用屏幕空间重心坐标插值，最后相除。所以透视校正的成本是<b>每个属性多一个通道</b>，
+      而不是多一次除法 —— 这也是为什么它便宜到所有 GPU 都默认开启。</div>
+    <div class="ctl">
+      <label><input type="checkbox" id="cb-persp-anim" checked> 相机前进（让扭曲动起来）</label>
+      <label>棋盘格密度 <input type="range" id="r-persp-tex" min="4" max="24" value="10" step="1"><span class="val" id="v-persp-tex">10</span></label>
+      <label>俯仰 <input type="range" id="r-persp-pitch" min="6" max="34" value="16" step="0.5"><span class="val" id="v-persp-pitch">16°</span></label>
+    </div>
+    <div class="vs">
+      <div>
+        <div class="h">正确：透视校正 λ′</div>
+        <canvas id="cv-persp-a" class="vpcanvas h300"></canvas>
+      </div>
+      <div>
+        <div class="h bad">常见错误：仿射 λ（PS1 扭动）</div>
+        <canvas id="cv-persp-b" class="vpcanvas h300"></canvas>
+      </div>
+    </div>
+    <div class="cap">同一块地板、同一张棋盘格纹理。左边格子均匀收敛，右边的格子会「跟着摄像机走」</div>
+    <canvas id="cv-wline" class="vpcanvas h140" style="margin-top:14px"></canvas>
+    <div class="cap"><code>1/w</code> 与 w 在屏幕上的一维剖面 —— 直线的那个才是能在屏幕空间直接插值的</div>
+    <div class="read">
+      <div><div class="k">近端 w / 远端 w</div><div class="v" id="pe-wr">—</div></div>
+      <div><div class="k">λ 与 λ′ 最大偏差</div><div class="v no" id="pe-dlam">—</div></div>
+      <div><div class="k">UV 仿射误差峰值</div><div class="v no" id="pe-uv">—</div></div>
+      <div><div class="k">1/w 剖面的线性残差</div><div class="v ok" id="pe-linw">—</div></div>
+      <div><div class="k">w 剖面的线性残差</div><div class="v no" id="pe-linw2">—</div></div>
+    </div>
+    <div class="note r"><b>为什么深度不受影响：</b>§6 已经证明 <code>z<sub>ndc</sub></code> 恰好是 <code>1/w</code> 的仿射函数，
+      而 <code>1/w</code> 在屏幕空间线性 ⇒ <code>z<sub>ndc</sub></code> 在屏幕空间<b>也</b>线性。
+      所以正确的实现是：<b>深度按屏幕空间线性插，属性按透视校正插</b>。
+      把两者统一成一种处理，必然错一半。上面「1/w 剖面的线性残差」与「w 剖面的线性残差」两个读数就是这条结论的数值证据。</div>
+  </div>
+</section>
+
+<!-- ================= §8 ================= -->
+<section id="s8">
+  <div class="sec-h"><div class="no">8</div><h2>背面剔除：判据必须取在屏幕空间</h2></div>
+  <div class="card">
+    <p>封闭模型的背面永远不会被看到 —— 除非模型破了、或者材质是半透明的。
+      所以先扔掉背向摄像机的三角形，能省下大约一半的片元。判据是<b>屏幕空间的有符号面积</b>：</p>
+    <div class="eq">
+      area2(v<sub>0</sub>,v<sub>1</sub>,v<sub>2</sub>) = E<sub>01</sub>(v<sub>2</sub>)　
+      <span class="cm">屏幕空间三角形的两倍有符号面积</span><br>
+      正面 ⇔ area2 的符号 = 该 API 的 <span class="hl">frontFace</span> 约定
+    </div>
+    <p>它比「算法线再点乘」更可靠的地方在于：<b>这个判别必须发生在所有变换之后</b>。
+      投影会翻转一次手性，视口变换里 y 轴朝下又翻转一次，模型矩阵还可能带负缩放。<b>有符号面积是变换之后的几何量</b>，
+      把这一串符号全都自动包含了进去。</p>
+    <div class="note r"><b>三种教科书级的翻车方式，这一节都能打开看：</b>
+      ① 用<b>物体空间</b>的绕序判朝向 —— 模型一转，判据不跟着变，于是「背面」永远不变；
+      ② <b>frontFace 约定</b>与网格绕序不一致 —— 整个模型内外面颠倒，看到的是内壁；
+      ③ 网格里<b>某个面的绕序写反了</b> —— 剔除后那个面直接消失，从外面能看进去。
+      第 ③ 种最隐蔽：<b>不开剔除时完全正常，一开剔除就少一块</b>，
+      而这正是网格数据问题最常见的暴露方式。</div>
+    <div class="ctl">
+      <label>朝向判据 <select id="sel-cull">
+        <option value="screen" selected>屏幕空间有符号面积（正确）</option>
+        <option value="off">不剔除</option>
+        <option value="object">物体空间绕序（常见错误：不随模型旋转）</option>
+      </select></label>
+      <label>frontFace <select id="sel-wind">
+        <option value="ccw" selected>逆时针为正面（CCW）</option>
+        <option value="cw">顺时针为正面（CW）</option>
+      </select></label>
+      <label class="wl"><input type="checkbox" id="cb-wind-bad"> 顶面绕序写反（网格绕序不一致）</label>
+      <label><input type="checkbox" id="cb-spin" checked> 自转</label>
+    </div>
+    <canvas id="cv-cull" class="vpcanvas h300"></canvas>
+    <div class="cap">12 个三角形的立方体；被剔除的三角形用暗红描出轮廓</div>
+    <div class="read">
+      <div><div class="k">提交三角形</div><div class="v" id="cu-total">—</div></div>
+      <div><div class="k">实际保留</div><div class="v" id="cu-kept">—</div></div>
+      <div><div class="k">被剔除</div><div class="v" id="cu-culled">—</div></div>
+      <div><div class="k">着色像素数</div><div class="v" id="cu-px">—</div></div>
+      <div><div class="k">area2 &gt; 0 的个数</div><div class="v" id="cu-pos">—</div></div>
+      <div><div class="k">area2 &lt; 0 的个数</div><div class="v" id="cu-neg">—</div></div>
+    </div>
+    <div class="note i"><b>顺带解释一个常见困惑：</b>为什么转动模型时「哪些面是背面」会变？
+      因为<b>背面是相对摄像机定义的</b>，不是物体的固有属性。同一个三角形，摄像机转到另一侧，
+      它就从背面变成正面 —— 而物体空间的绕序（①②③里的第 ① 条）完全不响应这件事，
+      这就是它作为判据必错的原因。</div>
+  </div>
+</section>
+
+<!-- ================= §9 ================= -->
+<section id="s9">
+  <div class="sec-h"><div class="no">9</div><h2>着色频率：Flat / Gouraud / Phong</h2></div>
+  <div class="card">
+    <p>光栅化有两个可编程阶段：<b>顶点着色器</b>（每个顶点跑一次）和<b>片元着色器</b>（每个像素跑一次）。
+      同一套光照公式放在哪一边，决定了画面质量与成本。三种经典做法：</p>
+    <table>
+      <tr><th style="width:18%">模式</th><th>顶点阶段做</th><th>片元阶段做</th><th style="width:22%">特征</th></tr>
+      <tr><td><b>Flat</b></td><td>不算光照，只传面法线</td><td>用面法线算一次</td><td>每个三角形一个色块</td></tr>
+      <tr><td><b>Gouraud</b></td><td><b>算光照</b>，传顶点颜色</td><td>插值颜色</td><td>高光会被「抹平」，出现 Mach band</td></tr>
+      <tr><td><b>Phong</b></td><td>只传顶点法线</td><td><b>算光照</b>（用插值后的法线）</td><td>高光正确，成本随像素数走</td></tr>
+    </table>
+    <div class="eq">
+      Flat　　<span class="cm">color = shade(N<sub>face</sub>)</span><br>
+      Gouraud　color = Σ λ<sub>i</sub> · <span class="cm">shade</span>(N<sub>i</sub>)　　<span class="cm">// 光照在顶点阶段算，颜色线性插值</span><br>
+      Phong　　color = <span class="cm">shade</span>(<span class="hl">normalize</span>(Σ λ<sub>i</sub> · N<sub>i</sub>))　　<span class="cm">// 法线插值，光照在片元阶段算</span>
+    </div>
+    <div class="note r"><b>Phong 那一行里的 <code>normalize</code> 不是可选的。</b>
+      插值之后法线的长度不再为 1（两个单位向量之间的线性插值结果是弦上的点，
+      长度 = cos(夹角/2) &lt; 1）。忘记归一化会同时弄错高光<b>强度</b>和<b>位置</b>，
+      而且画面上看起来只是「高光有点怪」，不会报错。打开下面的开关就能看到差别。</div>
+    <div class="ctl">
+      <label>模式 <select id="sel-shade">
+        <option value="flat">Flat（面法线）</option>
+        <option value="gouraud">Gouraud（插值颜色）</option>
+        <option value="phong" selected>Phong（插值法线）</option>
+      </select></label>
+      <label class="wl"><input type="checkbox" id="cb-shade-wrong"> 常见错误：插值后不归一化法线</label>
+      <label><input type="checkbox" id="cb-shade-spin" checked> 自转光源</label>
+      <label>面数 <input type="range" id="r-shade-seg" min="6" max="40" value="9" step="1"><span class="val" id="v-shade-seg">9</span></label>
+    </div>
+    <canvas id="cv-shade" class="vpcanvas h300"></canvas>
+    <div class="cap">低面数球体最能暴露差异：面数越低，Gouraud 的高光越像一块一块的补丁</div>
+    <div class="read">
+      <div><div class="k">顶点着色调用</div><div class="v" id="sh-vs">—</div></div>
+      <div><div class="k">片元着色调用</div><div class="v" id="sh-fs">—</div></div>
+      <div><div class="k">插值后 |N| 范围</div><div class="v" id="sh-n">—</div></div>
+      <div><div class="k">高光峰值</div><div class="v" id="sh-peak">—</div></div>
+      <div><div class="k">高光像素数</div><div class="v" id="sh-hlpx">—</div></div>
+    </div>
+    <div class="note i"><b>成本对比就在读数里：</b>Gouraud 的片元着色调用数是 0（片元阶段只做插值），
+      Phong 的片元着色调用数等于被覆盖的像素数。所以 Phong 更贵，但贵得值——
+      它的质量不随面数下降。<b>这也是为什么现代管线干脆取消了顶点光照这条路。</b></div>
+  </div>
+</section>
+
+<!-- ================= §10 ================= -->
+<section id="s10">
+  <div class="sec-h"><div class="no">10</div><h2>抗锯齿：MSAA 与 SSAA 差在哪</h2></div>
+  <div class="card">
+    <p>光栅化的覆盖判定是<b>硬判决</b>：像素中心在三角形内就整个像素着色，不在就完全不管。
+      于是斜边会变成台阶 —— 这就是锯齿。最直接的解法是<b>超采样（SSAA）</b>：
+      渲染到 4 倍分辨率再缩回来。它有效，但成本也 4 倍。</p>
+    <p><b>多重采样（MSAA）</b>换了个思路：<b>只让「覆盖」和「深度」变成多采样，着色仍然每像素一次。</b>
+      每个像素取 N 个子采样点，每个点有独立的覆盖标记与深度；片元着色只做一次，
+      结果写进所有被覆盖的子采样；最后按覆盖率把 N 个值平均。</p>
+    <div class="eq">
+      <span class="bad">SSAA</span>　着色次数 = 像素数 × N　　<span class="cm">每个子采样都算一遍光照</span><br>
+      <span class="hl">MSAA</span>　着色次数 = 像素数　　<span class="cm">只算一次，靠覆盖率做边缘平均</span>
+    </div>
+    <div class="note t"><b>MSAA 只在几何边缘有效，对纹理内部的高频没有作用</b>——
+      因为采样点只用来判覆盖，颜色还是每像素一次。所以 MSAA 几乎免费地解决了锯齿边缘，
+      却完全解决不了「远处棋盘格闪烁」。后者需要 mipmap 或者时域抗锯齿（TAA）。</div>
+    <div class="ctl">
+      <label>采样数 <select id="sel-msaa">
+        <option value="1">1× (无抗锯齿)</option>
+        <option value="4" selected>4× MSAA</option>
+        <option value="8">8× MSAA</option>
+      </select></label>
+      <label class="wl"><input type="checkbox" id="cb-msaa-ssaa"> 常见错误：每个子采样都着色（退化成 SSAA）</label>
+      <label><input type="checkbox" id="cb-msaa-edge" checked> 显示几何边缘</label>
+    </div>
+    <div class="grid2">
+      <div>
+        <canvas id="cv-msaa" class="vpcanvas h300"></canvas>
+        <div class="cap">渲染结果</div>
+      </div>
+      <div>
+        <canvas id="cv-msaa-zoom" class="vpcanvas h300"></canvas>
+        <div class="cap">像素级放大：每个方格里的小点是子采样位置，实心 = 被覆盖</div>
+      </div>
+    </div>
+    <div class="read">
+      <div><div class="k">每像素子采样数 N</div><div class="v" id="ms-n">—</div></div>
+      <div><div class="k">着色调用次数</div><div class="v" id="ms-shade">—</div></div>
+      <div><div class="k">若退化为 SSAA 的次数</div><div class="v no" id="ms-ssaa">—</div></div>
+      <div><div class="k">边缘像素平均覆盖率</div><div class="v" id="ms-cov">—</div></div>
+      <div><div class="k">只被部分覆盖的像素</div><div class="v" id="ms-part">—</div></div>
+      <div><div class="k">台阶直方图峰值</div><div class="v" id="ms-step">—</div></div>
+    </div>
+    <div class="note w"><b>为什么真实硬件还要「质心采样」：</b>本页的实现是在<b>像素中心</b>着色，
+      但如果像素中心恰好落在三角形外面（边缘像素很常见），在那里取重心坐标就等于<b>外推</b>——
+      属性会被算到三角形之外去。硬件的做法是把着色位置挪到这个像素被覆盖区域的质心上（centroid）。
+      代价是相邻像素的着色位置不再等距，某些导数类运算（比如 mipmap 的 LOD 选择）会出现瑕疵。
+      这是 MSAA 与「纹理采样」之间一个真实存在的工程摩擦点。</div>
+  </div>
+</section>
+
+<!-- ================= §11 ================= -->
+<section id="s11">
+  <div class="sec-h"><div class="no">11</div><h2>两条路的合流：现代渲染器的实际形态</h2></div>
+  <div class="card">
+    <p>走完这十节，结论不是「光栅化赢了」或「光线追踪赢了」，而是<b>两者各自守着对方做不到的那件事</b>：</p>
+    <table>
+      <tr><th style="width:30%">要解决的问题</th><th>谁做得好</th><th>为什么</th></tr>
+      <tr><td>主可见性（第一个交点）</td><td><b>光栅化</b></td><td>深度缓冲一趟扫过去，写入连贯、并行度极高</td></tr>
+      <tr><td>阴影（任意光源）</td><td><b>光线追踪</b></td><td>阴影贴图的分辨率与视锥都是妥协，光线查询是精确的</td></tr>
+      <tr><td>镜面反射 / 折射</td><td><b>光线追踪</b></td><td>SSR 只能反射屏幕里已有的东西，屏幕外就没了</td></tr>
+      <tr><td>全局光照 / 间接光</td><td><b>光线追踪</b></td><td>光栅化没有「从别处来的光」这个概念</td></tr>
+      <tr><td>高频细节可见性</td><td><b>光线追踪</b></td><td>它按几何求交，不受采样像素密度限制</td></tr>
+    </table>
+    <p>所以现代实时渲染器的实际形态是<b>混合管线</b>：</p>
+    <div class="eq">
+      光栅化 pass <span class="op">→</span> 写出 <span class="hl">G-Buffer</span>（深度 / 法线 / albedo / 粗糙度 / 运动矢量）<br>
+      <span class="op">↓</span> 光追 pass 在 G-Buffer 上发次级光线（阴影 / 反射 / AO / GI）<br>
+      <span class="op">↓</span> 时域累积（复用上一帧结果，压低采样数）<br>
+      <span class="op">↓</span> 合成 + 后处理
+    </div>
+    <canvas id="cv-merge" class="vpcanvas h300"></canvas>
+    <div class="cap">G-Buffer 是两条路的接口：光栅化把「这个像素的表面信息」写下来，光追拿它当起点</div>
+    <div class="note i"><b>为什么时域累积是必须的：</b>§1 说过，光线追踪的成本随采样数走。
+      要在 2 ms 内做完阴影、反射和一路间接光，每像素能负担的光线数是<b>个位数</b>。
+      解法是「每帧只发少量光线、跨帧累积」——代价是运动时的拖影，
+      所以需要运动矢量和历史校验来抑制。<b>这条路线正是 AlphaEngine 的
+      dual-tier ray tracing + temporal radiance feedback 要处理的核心问题。</b></div>
+    <div class="traps">
+      <div class="trap" data-jump="#s3"><h5>不归一化重心坐标</h5><p>直接用边缘函数值当权重，插值结果随三角形面积整体缩放。</p><span class="go">→ 去 §3 打开</span></div>
+      <div class="trap" data-jump="#s5"><h5>不判边界归属</h5><p>共享边上的像素被覆盖 0 次或 2 次，出现裂缝或重复着色。</p><span class="go">→ 去 §5 打开</span></div>
+      <div class="trap" data-jump="#s6"><h5>给深度做透视校正</h5><p>深度本来就是屏幕空间线性的，多一次校正反而错。</p><span class="go">→ 去 §6 打开</span></div>
+      <div class="trap" data-jump="#s7"><h5>仿射插值 UV</h5><p>PS1 那种纹理随摄像机扭动，就是这个错误。</p><span class="go">→ 去 §7 打开</span></div>
+      <div class="trap" data-jump="#s8"><h5>绕序与 frontFace 不一致</h5><p>整个模型内外面颠倒；个别面绕序写反则会凭空少一块，只有开剔除时才暴露。</p><span class="go">→ 去 §8 打开</span></div>
+      <div class="trap" data-jump="#s9"><h5>插值法线后不归一化</h5><p>高光强度与位置同时出错，画面看着只是「有点怪」。</p><span class="go">→ 去 §9 打开</span></div>
+      <div class="trap" data-jump="#s10"><h5>把 MSAA 当成 SSAA</h5><p>着色次数随采样数线性增长，成本优势全部丢失。</p><span class="go">→ 去 §10 打开</span></div>
+    </div>
+    <div class="note t"><b>这页的验证方式：</b>和光追页一样，本页也配套了一套校验脚本——
+      静态守卫、像素级断言、数学独立复算、以及<b>负向变异测试</b>（把上面每一个「常见错误」
+      注入回页面，确认对应的检查点真的会响）。一条永远通过的断言等于没有断言。</div>
+  </div>
+</section>
+
+
+</main>
+
+<footer>
+  <b>怎么读这页</b>
+  <ul>
+    <li>每节都有一块可以动手改的画布；<b>带红色标记的开关是「常见错误写法」</b>，打开它会看到错误在屏幕上的真实样子。</li>
+    <li>本页是<b>纯 CPU 软件光栅化</b>：所有像素都由下面的 JS 算出，没有走 WebGL。这样才能把中间状态（边缘函数、深度缓冲、覆盖率）画出来。</li>
+    <li>姊妹篇：<a href="../ray-tracing/index.html">光线追踪 · 可视化拆解</a>。两页的 §1 互为镜像。</li>
+  </ul>
+  <p class="muted">术语与 <code>docs/20-Knowledge/</code> 下的概念笔记对齐；本页只讲原理，不构成任何项目架构决策。</p>
+</footer>
+
+</div>
+
+<script>
+/* ==================================================================
+   光栅化 · 可视化拆解
+   ------------------------------------------------------------------
+   本页全部像素由下面的 JS 算出，没有走 WebGL —— 这样才能把中间状态
+   （边缘函数、深度缓冲、覆盖率、子采样掩码）画出来。
+
+   两页共用的约定：低分辨率帧缓冲 + putImageData + drawImage 放大。
+   ================================================================== */
+(function(){
+'use strict';
+
+/* ---------------- 通用小工具 ---------------- */
+function $(id){ return document.getElementById(id); }
+function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
+function lerp(a,b,t){ return a+(b-a)*t; }
+function fmt(n,d){ return (+n).toFixed(d===undefined?2:d); }
+/* 科学计数法。§6 的可分辨距离、§7 的线性残差都要把它印到页面上，
+   两个模块都得用 —— 所以必须放在顶层。曾经它被写在 §6 的闭包里，
+   §7 调用时就抛 "sci is not defined"，整个脚本在顶层执行阶段就中断。 */
+function sci(v){
+  if(!isFinite(v) || v<=0) return '—';
+  var e = Math.floor(Math.log10(v));
+  return (v/Math.pow(10,e)).toFixed(2)+'e'+e;
+}
+
+var DPR = (window.devicePixelRatio||1) > 1.5 ? 2 : 1;
+/* 把画布适配到 CSS 尺寸并返回 {ctx,w,h}（后续绘制都用 CSS 像素坐标） */
+function fit(cv){
+  var w = cv.clientWidth || 640, h = cv.clientHeight || 300;
+  var pw = Math.round(w*DPR), ph = Math.round(h*DPR);
+  if(cv.width !== pw || cv.height !== ph){ cv.width = pw; cv.height = ph; }
+  var ctx = cv.getContext('2d');
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  return {ctx:ctx, w:w, h:h};
+}
+
+var VP_BG = '#0c1017';
+var off = document.createElement('canvas');   // 低分辨率缓冲的暂存画布
+
+/* ==================================================================
+   低分辨率帧缓冲
+   ------------------------------------------------------------------
+   硬件是逐像素并行的，JS 不是：640×320 = 20 万像素逐像素跑一帧要几十毫秒。
+   降到 ~200×150 后单帧在几毫秒内；而在讲边缘函数、覆盖率、深度缓冲时，
+   「一个像素就是一个可见方格」反而比高清更清楚。
+   ================================================================== */
+function makeFB(W,H){
+  return { W:W, H:H,
+    col:new Float32Array(W*H*3),   // 线性 RGB，0..1
+    z:new Float32Array(W*H),       // 深度缓冲（默认存 z01；reverse 时存 1−z01）
+    cover:new Uint16Array(W*H),    // 被覆盖次数——§5 水密性的唯一客观判据
+    img:null, imgW:0 };
+}
+/* reverse=true 时「远」对应 0（缓冲里存的是 1−z），初值必须跟着反过来 ——
+   否则第一帧的深度比较会拿 1（= 近端）当「空缓冲」，整张图都被判成「更远」而丢弃。 */
+function fbClear(fb, r,g,b, reverse){
+  var n = fb.W*fb.H, i, z0 = reverse ? 0 : 1;
+  for(i=0;i<n;i++){ fb.col[i*3]=r; fb.col[i*3+1]=g; fb.col[i*3+2]=b; fb.z[i]=z0; fb.cover[i]=0; }
+}
+/* 线性 → sRGB 的粗略编码（γ=1/2.2）。帧缓冲里存线性值，
+   这样着色计算与「覆盖率按线性平均」才成立；只有最后上屏才编码。 */
+function encode(c){ return clamp(Math.round(255*Math.pow(clamp(c,0,1), 1/2.2)), 0, 255); }
+function fillImage(fb){
+  var n = fb.W*fb.H;
+  if(!fb.img || fb.imgW !== fb.W){
+    fb.img = { width:fb.W, height:fb.H, data:new Uint8ClampedArray(fb.W*fb.H*4) };
+    fb.imgW = fb.W;
+  }
+  var d = fb.img.data;
+  for(var i=0;i<n;i++){
+    d[i*4  ] = encode(fb.col[i*3  ]);
+    d[i*4+1] = encode(fb.col[i*3+1]);
+    d[i*4+2] = encode(fb.col[i*3+2]);
+    d[i*4+3] = 255;
+  }
+  return fb.img;
+}
+/* 上屏：最近邻放大（不加平滑——放大后要能看清每一个像素方格） */
+function blitFB(fb, ctx, w, h){
+  var img = fillImage(fb);
+  off.width = fb.W; off.height = fb.H;
+  var octx = off.getContext('2d');
+  octx.putImageData(img, 0, 0);
+  ctx.fillStyle = VP_BG; ctx.fillRect(0,0,w,h);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(off, 0, 0, w, h);
+}
+/* 只用像素缓冲，不经过 canvas —— 给校验脚本用的纯函数出口 */
+function fbToRGBA(fb){ return fillImage(fb).data; }
+
+/* ==================================================================
+   三维小工具与相机
+   ================================================================== */
+function v3(x,y,z){ return {x:x,y:y,z:z}; }
+function sub3(a,b){ return v3(a.x-b.x, a.y-b.y, a.z-b.z); }
+function add3(a,b){ return v3(a.x+b.x, a.y+b.y, a.z+b.z); }
+function mul3(a,s){ return v3(a.x*s, a.y*s, a.z*s); }
+function cross3(a,b){ return v3(a.y*b.z-a.z*b.y, a.z*b.x-a.x*b.z, a.x*b.y-a.y*b.x); }
+function dot3(a,b){ return a.x*b.x + a.y*b.y + a.z*b.z; }
+function len3(a){ return Math.sqrt(dot3(a,a)); }
+function nrm3(a){ var l=len3(a)||1; return v3(a.x/l, a.y/l, a.z/l); }
+
+/* 右手系相机，朝 −Z 看。返回「世界 → 观察空间」的变换。
+   观察空间里 z < 0 表示在摄像机前方，于是 w = −z > 0 恒成立。 */
+function makeView(eye, yaw, pitch){
+  var cy=Math.cos(yaw), sy=Math.sin(yaw), cp=Math.cos(pitch), sp=Math.sin(pitch);
+  var fwd = v3(sy*cp, sp, -cy*cp);
+  var right = nrm3(cross3(fwd, v3(0,1,0)));
+  var up = cross3(right, fwd);
+  return function(p){
+    var d = sub3(p, eye);
+    return v3(dot3(d,right), dot3(d,up), -dot3(d,fwd));
+  };
+}
+
+/* 观察空间 → 屏幕空间。
+   这里把三个关键量都显式算出来，它们后面每一节都要用：
+     screen x/y、w（= −z_v）、z01（深度缓冲里的值，是 1/w 的仿射函数） */
+function makeProj(W, H, fovDeg, n, f){
+  var tanH = Math.tan(fovDeg*Math.PI/360), aspect = W/H;
+  return function(vs){
+    var w = -vs.z;
+    if(!(w > 1e-6)) w = 1e-6;
+    var ndcX = vs.x/(w*tanH*aspect), ndcY = vs.y/(w*tanH);
+    return {
+      x: (ndcX + 1)*0.5*W,
+      y: (1 - ndcY)*0.5*H,
+      w: w,
+      /* z01 = (f/(f−n))·(1 − n/w)：1/w 的仿射函数。
+         这条式子就是 §6 全部结论的代数来源。 */
+      z: (f/(f-n))*(1 - n/w),
+      ndcY: ndcY, ndcX: ndcX
+    };
+  };
+}
+function z01of(w, n, f){ return (f/(f-n))*(1 - n/w); }
+
+/* ==================================================================
+   光栅化核 —— 整页共用
+   ------------------------------------------------------------------
+   屏幕空间取 y 朝下。边缘函数：
+     E(a,b,p) = (b.x−a.x)(p.y−a.y) − (b.y−a.y)(p.x−a.x)
+   · 它是 |a→b→p| 的两倍有符号面积
+   · 三条边同号 ⇔ 点在内部（与绕序无关）
+   · 重心坐标 = 边缘函数 / 三者和，分母恰好等于三角形的两倍面积
+
+   注意下方的绕序归一化：直接用「三边同号」判内部时不需要它，
+   但 top-left 规则必须知道「哪一侧是内部」，所以要先定出 sgn。
+   ================================================================== */
+function Efun(ax,ay,bx,by,px,py){ return (bx-ax)*(py-ay) - (by-ay)*(px-ax); }
+function area2(a,b,c){ return Efun(a.x,a.y, b.x,b.y, c.x,c.y); }
+
+/* 归一化绕序：sgn = +1 表示 v0→v1→v2 在屏幕空间已使内部满足 E ≥ 0 */
+function windingSign(v0,v1,v2){ return area2(v0,v1,v2) < 0 ? -1 : 1; }
+
+/* top-left 规则：一条边被接受为「边界像素也算在内部」的条件。
+   sgn 把边方向折到归一化绕序下 —— 这一步很容易漏，漏了之后
+   共享边会一边接受一边拒绝，裂缝立刻出现。
+   判据：水平边（dy=0）且指向左 ⇒ top；非水平边且指向下 ⇒ left。 */
+function edgeIsTopLeft(sgn, a, b){
+  var dx = (b.x-a.x)*sgn, dy = (b.y-a.y)*sgn;
+  return dy === 0 ? (dx < 0) : (dy > 0);
+}
+
+/* 屏幕空间（仿射）重心坐标。返回 {l0,l1,l2,sum}，sum 应等于 area2(v0,v1,v2)。 */
+function baryScreen(v0,v1,v2, px,py){
+  var w0 = Efun(v1.x,v1.y, v2.x,v2.y, px,py);
+  var w1 = Efun(v2.x,v2.y, v0.x,v0.y, px,py);
+  var w2 = Efun(v0.x,v0.y, v1.x,v1.y, px,py);
+  var s = w0 + w1 + w2;
+  return { l0:w0/s, l1:w1/s, l2:w2/s, sum:s, w0:w0, w1:w1, w2:w2 };
+}
+
+/* 透视校正：屏幕上线性的是 attr/w 与 1/w。
+   把屏幕空间权重先除以各顶点的 w，再归一化，就得到正确的属性权重。
+   —— 这就是「每个属性多一个通道」的那个通道。 */
+function perspWeights(l, w0, w1, w2){
+  var a0 = l.l0/w0, a1 = l.l1/w1, a2 = l.l2/w2;
+  var s = a0 + a1 + a2;
+  return { l0:a0/s, l1:a1/s, l2:a2/s };
+}
+
+/* 逐像素着色回调的默认实现：Blinn-Phong + 一个方向光。
+   传进来的 n 是插值后的法线（可能未归一化 —— §9 的错误开关就卡在这里）。 */
+var LIGHT = nrm3(v3(-0.45, 0.72, 0.53));
+function blinnPhong(n, base, spec, amb){
+  var N = nrm3(n), L = LIGHT;
+  var diff = Math.max(0, dot3(N, L));
+  var V = v3(0,0,1);
+  var Hh = nrm3(add3(L, V));
+  var sp = Math.pow(Math.max(0, dot3(N, Hh)), 42);
+  var k = (amb===undefined?0.18:amb);
+  return [ base[0]*(k + 0.82*diff) + spec*sp,
+           base[1]*(k + 0.82*diff) + spec*sp*0.97,
+           base[2]*(k + 0.82*diff) + spec*sp*0.92 ];
+}
+
+/* 由（透视校正后的）权重取出插值属性。
+   抽成独立函数是为了让 MSAA 那条路径复用同一份实现 ——
+   二次实现出来的东西只能证明「我抄得对不对」，不能证明页面是对的。 */
+function attrAt(v0,v1,v2,P){
+  var nx = P.l0*v0.nx + P.l1*v1.nx + P.l2*v2.nx;
+  var ny = P.l0*v0.ny + P.l1*v1.ny + P.l2*v2.ny;
+  var nz = P.l0*v0.nz + P.l1*v1.nz + P.l2*v2.nz;
+  return {
+    u: P.l0*v0.u + P.l1*v1.u + P.l2*v2.u,
+    nx:nx, ny:ny, nz:nz,
+    nlen: Math.sqrt(nx*nx + ny*ny + nz*nz),   /* 插值后法线长度 —— §9 的判据 */
+    r: P.l0*v0.r + P.l1*v1.r + P.l2*v2.r,
+    g: P.l0*v0.g + P.l1*v1.g + P.l2*v2.g,
+    b: P.l0*v0.b + P.l1*v1.b + P.l2*v2.b,
+    l0:P.l0, l1:P.l1, l2:P.l2
+  };
+}
+
+/* ==================================================================
+   rasterTri —— 单三角形光栅化
+   ------------------------------------------------------------------
+   o 的可选字段：
+     mode   'full' | 'bbox' | 'scan'     覆盖范围收缩策略（§4）
+     rule   'tl' | 'all' | 'none'        边界归属（§5）。'tl' 是 top-left 规则；
+                                          'all' → 共享边被两侧都接受（覆盖 2 次）；
+                                          'none' → 两侧都拒绝（覆盖 0 次，裂缝）
+     persp  true/false                   属性是否透视校正（§7）
+     ztest  true/false                   深度测试（§6）
+     reverse true/false                  深度缓冲存 1−z（§6）
+     mask   Uint8Array(W*H)              可选：1=测过未通过 / 2=覆盖 —— §4 用
+     shade  function(px,py,P,attr,l)->[r,g,b]
+     cnt    {tested,covered,shaded}      可选：累计计数器
+   返回本三角形覆盖的像素数。
+   ================================================================== */
+function rasterTri(fb, v0, v1, v2, o){
+  o = o || {};
+  var W = fb.W, H = fb.H;
+  var sgn = windingSign(v0,v1,v2);
+  var tl = { e01: edgeIsTopLeft(sgn, v0, v1),
+             e12: edgeIsTopLeft(sgn, v1, v2),
+             e20: edgeIsTopLeft(sgn, v2, v0) };
+  var rule = o.rule || 'tl';
+  var cnt = o.cnt, covered = 0;
+
+  /* 内部判定：三条边的归一化边缘函数都 ≥ 0。
+     == 0 表示正好落在边上 —— 由 rule 决定这个像素归谁。 */
+  function boundaryOK(isTL){
+    if(rule === 'all')  return true;    /* 错误写法：边界全收 → 重复覆盖 */
+    if(rule === 'none') return false;   /* 错误写法：边界全弃 → 出现裂缝 */
+    return isTL;                        /* 正确：只收顶边与左边            */
+  }
+  function inside(px,py){
+    var a = sgn*Efun(v0.x,v0.y, v1.x,v1.y, px,py);
+    var b = sgn*Efun(v1.x,v1.y, v2.x,v2.y, px,py);
+    var c = sgn*Efun(v2.x,v2.y, v0.x,v0.y, px,py);
+    if(a < 0 || b < 0 || c < 0) return false;
+    if(a === 0 && !boundaryOK(tl.e01)) return false;
+    if(b === 0 && !boundaryOK(tl.e12)) return false;
+    if(c === 0 && !boundaryOK(tl.e20)) return false;
+    return true;
+  }
+
+  /* 覆盖范围：三种策略 */
+  var x0=0, x1=W-1, y0=0, y1=H-1;
+  if(o.mode !== 'full'){
+    x0 = Math.max(0, Math.floor(Math.min(v0.x,v1.x,v2.x)));
+    x1 = Math.min(W-1, Math.ceil (Math.max(v0.x,v1.x,v2.x)));
+    y0 = Math.max(0, Math.floor(Math.min(v0.y,v1.y,v2.y)));
+    y1 = Math.min(H-1, Math.ceil (Math.max(v0.y,v1.y,v2.y)));
+  }
+
+  /* reverse-Z 下「更近」意味着 z 更大，比较方向整体取反 */
+  var zs = o.reverse ? -1 : 1;
+
+  for(var y=y0; y<=y1; y++){
+    var rx0 = x0, rx1 = x1;
+    if(o.mode === 'scan'){
+      /* 扫描线：本行与三条边的交点给出 x 区间。
+         三角形是凸的，所以只有一段区间，取 min/max 就够。 */
+      var lo = Infinity, hi = -Infinity, k;
+      var ed = [[v0,v1],[v1,v2],[v2,v0]];
+      for(k=0;k<3;k++){
+        var A = ed[k][0], B = ed[k][1];
+        var dy = B.y - A.y;
+        if(Math.abs(dy) < 1e-12) continue;
+        var t = (y + 0.5 - A.y)/dy;
+        if(t < 0 || t > 1) continue;
+        var xi = A.x + t*(B.x - A.x);
+        if(xi < lo) lo = xi;
+        if(xi > hi) hi = xi;
+      }
+      /* 水平边正好落在本扫描线中心（退化行）时上面的式子会除零，用端点补回来 */
+      for(k=0;k<3;k++){
+        var V = ed[k][0];
+        if(Math.abs(V.y - (y+0.5)) < 0.5){ if(V.x<lo) lo=V.x; if(V.x>hi) hi=V.x; }
+      }
+      if(lo === Infinity) continue;
+      rx0 = Math.max(x0, Math.floor(lo));
+      rx1 = Math.min(x1, Math.ceil(hi));
+    }
+    for(var x=rx0; x<=rx1; x++){
+      var px = x + 0.5, py = y + 0.5;
+      if(cnt) cnt.tested++;
+      if(o.mask && o.mask[y*W+x] === 0) o.mask[y*W+x] = 1;
+      if(!inside(px,py)) continue;
+      var idx = y*W + x;
+      var l = baryScreen(v0,v1,v2, px,py);
+      /* 深度：屏幕空间线性插值。这是数学上正确的做法（见 §6），
+         不是「偷懒」—— 对深度再做一次透视校正反而会错（depthPersp 就是那个错误）。 */
+      var lz = o.depthPersp ? perspWeights(l, v0.w, v1.w, v2.w) : l;
+      var z = lz.l0*v0.z + lz.l1*v1.z + lz.l2*v2.z;
+      var stored = o.reverse ? 1 - z : z;
+      if(o.ztest !== false){
+        /* 保留条件统一写成 zs·stored < zs·buf：
+           zs=+1 时「越小越近」，zs=−1（reverse）时「越大越近」。 */
+        if(!(zs*stored < zs*fb.z[idx])) continue;
+      }
+      fb.z[idx] = stored;
+      var P = (o.persp !== false) ? perspWeights(l, v0.w, v1.w, v2.w) : l;
+      var attr = attrAt(v0,v1,v2,P);
+      var col = o.shade(px, py, P, attr, l);
+      fb.col[idx*3  ] = col[0];
+      fb.col[idx*3+1] = col[1];
+      fb.col[idx*3+2] = col[2];
+      fb.cover[idx]++;
+      covered++;
+      if(o.mask) o.mask[idx] = 2;
+      if(cnt) cnt.covered++;
+    }
+  }
+  return covered;
+}
+
+/* ==================================================================
+   画布上的通用标注工具
+   ------------------------------------------------------------------
+   字号下限 11.5px：本页等宽字体在 10px / 10.5px 下，字形墨迹宽于字身宽度，
+   相邻字符会互相压住、渲染成糊字（同一字体 11.5px 就干净）。
+   这是上一页用像素级取证测出来的事实，见 docs/demos/ray-tracing/_shot.js。
+   ================================================================== */
+var FONT = '600 11.5px ui-monospace,Consolas,monospace';
+function tag(ctx, x, y, text, col, align){
+  ctx.font = FONT;
+  ctx.textAlign = align || 'left';
+  var w = ctx.measureText(text).width;
+  var x0 = align === 'right' ? x - w : (align === 'center' ? x - w/2 : x);
+  ctx.fillStyle = 'rgba(9,12,18,0.82)';
+  ctx.fillRect(x0 - 4, y - 12, w + 8, 16);
+  ctx.fillStyle = col || '#c8d2e4';
+  ctx.fillText(text, x0, y);
+}
+function rect(ctx, x, y, w, h, col, lw, dash){
+  ctx.save();
+  ctx.setLineDash(dash || []);
+  ctx.strokeStyle = col; ctx.lineWidth = lw || 1;
+  ctx.strokeRect(x, y, w, h);
+  ctx.restore();
+}
+
+/* 场景三角形：屏幕空间顶点 + 属性。§1–§5 只用 x/y/z，其余字段留默认值。 */
+function mkVert(x, y, z){
+  return { x:x, y:y, z:(z===undefined?0.5:z), w:1,
+           u:0, nx:0, ny:0, nz:1, r:0.8, g:0.8, b:0.8 };
+}
+function flatShade(col){
+  return function(){ return col; };
+}
+/* 依次光栅化一组三角形，共用一份帧缓冲与选项 */
+function renderTris(fb, tris, o){
+  var i, n = 0;
+  for(i=0;i<tris.length;i++) n += rasterTri(fb, tris[i][0], tris[i][1], tris[i][2], o);
+  return n;
+}
+
+/* ==================================================================
+   §1 谁去找谁
+   ------------------------------------------------------------------
+   同一个场景、同一份输出，只把两层循环的顺序对调。
+   左边按「三角形优先」推进：一块一块地填；
+   右边按「像素优先」推进：一行一行地扫。
+   最后落在缓冲里的像素完全一致。
+   ================================================================== */
+var fork = (function(){
+  var cvA = $('cv-fork-tri'), cvB = $('cv-fork-pix');
+  if(!cvA || !cvB) return null;
+  var W = 128, H = 88;
+  var fb = makeFB(W,H);
+  /* 场景：六个三角形拼成一个箭头状图形，每个给一个可区分的颜色 */
+  var COLS = [[0.33,0.72,0.62],[0.42,0.36,0.88],[0.90,0.62,0.20],
+              [0.80,0.24,0.42],[0.30,0.56,0.86],[0.55,0.72,0.32]];
+  var TRI = [];
+  (function(){
+    var poly = [[12,10],[58,18],[86,42],[112,76],[46,78],[22,52]];
+    for(var i=0;i<6;i++){
+      var a = poly[i], b = poly[(i+1)%6], c = [64,44];
+      TRI.push([ mkVert(a[0],a[1]), mkVert(b[0],b[1]), mkVert(c[0],c[1]) ]);
+    }
+  })();
+  /* 逐三角形预光栅化一次，拿到「每个像素归谁」的归属图 */
+  var owner = new Int8Array(W*H).fill(-1);
+  var byTri = [], rowMajor = [], k;
+  for(k=0;k<TRI.length;k++){
+    var list = [];
+    var tmp = makeFB(W,H);
+    fbClear(tmp, 0,0,0);
+    rasterTri(tmp, TRI[k][0], TRI[k][1], TRI[k][2], {
+      mode:'bbox', shade:flatShade([1,1,1]), ztest:false
+    });
+    for(var i2=0;i2<W*H;i2++){
+      if(tmp.cover[i2] > 0 && owner[i2] < 0){ owner[i2] = k; list.push(i2); }
+    }
+    byTri.push(list);
+  }
+  for(var y=0;y<H;y++) for(var x=0;x<W;x++){
+    if(owner[y*W+x] >= 0) rowMajor.push(y*W+x);
+  }
+  var covered = rowMajor.length;
+  var shown = makeFB(W,H);
+  function paint(px, col, alpha){
+    shown.col[px*3  ] = lerp(shown.col[px*3  ], col[0], alpha===undefined?1:alpha);
+    shown.col[px*3+1] = lerp(shown.col[px*3+1], col[1], alpha===undefined?1:alpha);
+    shown.col[px*3+2] = lerp(shown.col[px*3+2], col[2], alpha===undefined?1:alpha);
+    shown.z[px] = 0;
+  }
+  function dump(list, upto){
+    var i, lim = Math.min(upto, list.length);
+    for(i=0;i<lim;i++){ var p = list[i]; paint(p, COLS[owner[p]]); }
+    return lim;
+  }
+  var T0 = null, SPEED = 0.55;   /* 每秒推进的「条目」比例 */
+  var phase = 0, cur = 0;
+  function frame(now){
+    if(T0 === null) T0 = now;
+    var el = (now - T0)/1000;
+    var total = Math.max(covered, TRI.length);
+    var prog = clamp(el*SPEED*total/2.2, 0, total*1.15);
+    phase = prog;
+    fbClear(shown, 0.047,0.063,0.090);
+    var triQuota = Math.min(TRI.length, Math.floor(prog/ (total/TRI.length)));
+    var acc = 0;
+    for(var t=0;t<TRI.length;t++){
+      var lim = t < triQuota ? byTri[t].length
+              : (t === triQuota ? Math.round(prog - triQuota*(total/TRI.length)) : 0);
+      acc += dump(byTri[t], Math.max(0, Math.min(lim, byTri[t].length)));
+    }
+    var fA = fit(cvA);
+    blitFB(shown, fA.ctx, fA.w, fA.h);
+    var sc = fA.w/W, scy = fA.h/H;
+    if(triQuota < TRI.length){
+      var T = TRI[Math.min(triQuota, TRI.length-1)];
+      var mnx = Math.min(T[0].x,T[1].x,T[2].x)*sc, mxx = Math.max(T[0].x,T[1].x,T[2].x)*sc;
+      var mny = Math.min(T[0].y,T[1].y,T[2].y)*scy, mxy = Math.max(T[0].y,T[1].y,T[2].y)*scy;
+      rect(fA.ctx, mnx, mny, mxx-mnx, mxy-mny, '#f0b429', 1.5, [4,3]);
+    }
+    tag(fA.ctx, 8, 16, '三角形 ' + Math.min(triQuota+1,TRI.length) + '/' + TRI.length, '#f0b429');
+
+    /* 右图：按像素行推进 */
+    var shown2 = makeFB(W,H);
+    fbClear(shown2, 0.047,0.063,0.090);
+    var rowQuota = Math.round(prog/1.15*covered/total*1.0);
+    var lim2 = Math.min(covered, Math.round(prog*(covered/total)));
+    for(var q=0;q<lim2;q++){ var p2 = rowMajor[q]; paint2(shown2, p2, COLS[owner[p2]]); }
+    var fB = fit(cvB);
+    blitFB(shown2, fB.ctx, fB.w, fB.h);
+    var scanRow = lim2>0 ? Math.floor(rowMajor[lim2-1]/W) : 0;
+    rect(fB.ctx, 0, scanRow*scy, fB.w, scy, '#f0b429', 1.5, [4,3]);
+    tag(fB.ctx, 8, 16, '像素 ' + lim2 + '/' + covered, '#f0b429');
+    if($('pf-fork')) $('pf-fork').textContent = '左 ' + Math.round(100*acc/Math.max(1,covered)) + '% · 右 ' + Math.round(100*lim2/Math.max(1,covered)) + '%';
+    requestAnimationFrame(frame);
+  }
+  function paint2(f, px, col){
+    f.col[px*3  ] = col[0]; f.col[px*3+1] = col[1]; f.col[px*3+2] = col[2];
+  }
+  /* 读数 */
+  var total = W*H;
+  var se = [$('fk-p'),$('fk-t'),$('fk-rt'),$('fk-ras'),$('fk-ratio')];
+  if(se[0]) se[0].textContent = total;
+  if(se[1]) se[1].textContent = TRI.length;
+  if(se[2]) se[2].textContent = (total*TRI.length).toLocaleString();
+  if(se[3]) se[3].textContent = covered;
+  if(se[4]) se[4].textContent = fmt(total*TRI.length/covered, 1) + '×';
+  var bt = $('btn-fork');
+  if(bt) bt.addEventListener('click', function(){ T0 = null; });
+  requestAnimationFrame(frame);
+  return { owner:owner, COLS:COLS, W:W, H:H, covered:covered, TRI:TRI };
+})();
+
+/* ==================================================================
+   §2 三角形与投影
+   ================================================================== */
+var proj = (function(){
+  var cv3 = $('cv-proj-3d'), cv2 = $('cv-proj-2d');
+  if(!cv3 || !cv2) return null;
+  var rot = $('r-proj-rot'), dist = $('r-proj-dist');
+  function tris(){
+    var a = (+(rot?rot.value:24))*Math.PI/180, d = +(dist?dist.value:7);
+    var cy=Math.cos(a), sy=Math.sin(a);
+    var P = [[-1.6,-1.1,0.0],[1.7,-0.9,-0.9],[0.4,1.5,0.6]];
+    return P.map(function(p){
+      /* 注意是 −d：观察空间里「摄像机前方」是 −Z，前移是减不是加。
+         写成 +d 会把物体放到摄像机背后，透视除法得到 w < 0，画面整个翻面。 */
+      return v3(p[0]*cy - p[2]*sy, p[1], p[0]*sy + p[2]*cy - d);
+    });
+  }
+  function draw(){
+    var P = tris(), i;
+    var eye = v3(0, 0, 0);
+    var view = makeView(eye, 0, -0.06);
+    var wv = P.map(view);
+    /* 左：观察空间的线框 */
+    var f3 = fit(cv3), c3 = f3.ctx;
+    c3.fillStyle = VP_BG; c3.fillRect(0,0,f3.w,f3.h);
+    var ox = f3.w*0.5 - 6, oy = f3.h*0.74, s3 = Math.min(f3.w,f3.h)*0.13;
+    /* 斜投影（单轴，cabinet 式）：
+         横轴 = 观察空间 x，并且「越靠前（z 越负）越往右」；
+         纵轴 = 观察空间 y，**上就是上**。
+       曾经写成 oy + p.y*s3 - p.z*s3*0.30：纵轴带了个正号，
+       于是 +y（眼睛上方）被画到画布下方，整个线框上下镜像，
+       再加上深度项又把 y 往下推，三角形有一半直接掉出画布。
+       只靠肉眼看「一个三角形」是发现不了的 —— 它照样是个三角形。 */
+    function X3(p){ return ox + p.x*s3 - p.z*s3*0.55; }
+    function Y3(p){ return oy - p.y*s3; }
+    /* 相机 */
+    c3.fillStyle = '#f0b429';
+    c3.beginPath(); c3.arc(ox, oy, 3.5, 0, 6.284); c3.fill();
+    tag(c3, ox+8, oy+4, '眼睛', '#f0b429');
+    c3.strokeStyle = '#3d4657'; c3.lineWidth = 1;
+    for(i=0;i<3;i++){ c3.beginPath(); c3.moveTo(ox,oy); c3.lineTo(X3(wv[i]), Y3(wv[i])); c3.stroke(); }
+    /* 三角形 */
+    c3.strokeStyle = '#5fd0c0'; c3.lineWidth = 2;
+    c3.beginPath(); c3.moveTo(X3(wv[0]),Y3(wv[0])); c3.lineTo(X3(wv[1]),Y3(wv[1])); c3.lineTo(X3(wv[2]),Y3(wv[2])); c3.closePath(); c3.stroke();
+    for(i=0;i<3;i++){
+      c3.fillStyle = '#5fd0c0';
+      c3.beginPath(); c3.arc(X3(wv[i]), Y3(wv[i]), 2.6, 0, 6.284); c3.fill();
+      tag(c3, X3(wv[i])+6, Y3(wv[i])-4, 'w='+fmt(-wv[i].z,2), '#9fb0c8');
+    }
+    tag(c3, 8, 16, '观察空间 · 右 = 前方（−z）· 上 = +y', '#8fa0b8');
+    /* 过眼睛画一条水平参考线：没有它，「上方」这个说法就没法核验 */
+    c3.strokeStyle = 'rgba(143,160,184,0.35)'; c3.lineWidth = 1;
+    c3.beginPath(); c3.moveTo(ox-26, oy); c3.lineTo(f3.w-8, oy); c3.stroke();
+    tag(c3, f3.w-8, oy-5, 'y = 0', '#6f7d92', 'right');
+
+    /* 右：屏幕空间 */
+    var f2 = fit(cv2), c2 = f2.ctx;
+    var Wl = 128, Hl = 90;
+    var pr = makeProj(Wl, Hl, 62, 0.5, 200);
+    var sv = wv.map(pr);
+    c2.fillStyle = VP_BG; c2.fillRect(0,0,f2.w,f2.h);
+    var cell = Math.min(f2.w/24, f2.h/17);
+    c2.strokeStyle = '#1b2230'; c2.lineWidth = 1;
+    for(i=0;i<=24;i++){ c2.beginPath(); c2.moveTo(i*cell,0); c2.lineTo(i*cell, f2.h); c2.stroke(); }
+    for(i=0;i<=17;i++){ c2.beginPath(); c2.moveTo(0,i*cell); c2.lineTo(f2.w, i*cell); c2.stroke(); }
+    var cw = f2.w/Wl, chh = f2.h/Hl;
+    c2.strokeStyle = '#5fd0c0'; c2.lineWidth = 2;
+    c2.beginPath();
+    c2.moveTo(sv[0].x*cw, sv[0].y*chh);
+    c2.lineTo(sv[1].x*cw, sv[1].y*chh);
+    c2.lineTo(sv[2].x*cw, sv[2].y*chh);
+    c2.closePath(); c2.stroke();
+    for(i=0;i<3;i++){
+      c2.fillStyle = '#5fd0c0';
+      c2.beginPath(); c2.arc(sv[i].x*cw, sv[i].y*chh, 2.6, 0, 6.284); c2.fill();
+      tag(c2, sv[i].x*cw+6, sv[i].y*chh-4, 'z01='+fmt(sv[i].z,2), '#9fb0c8');
+    }
+    tag(c2, 8, 16, '屏幕空间 · 像素坐标 y 朝下', '#8fa0b8');
+    /* 读数 */
+    var wmax = Math.max(sv[0].w, sv[1].w, sv[2].w), wmin = Math.min(sv[0].w, sv[1].w, sv[2].w);
+    var a2 = Math.abs(area2(sv[0],sv[1],sv[2]))/2;
+    var a3 = Math.abs(cross3(sub3(wv[1],wv[0]), sub3(wv[2],wv[0])))/2;
+    set('pj-w', fmt(wmin,2)+' … '+fmt(wmax,2));
+    set('pj-wratio', fmt(wmin/Math.max(1e-6,wmax), 3));
+    set('pj-shrink', fmt(a2/Math.max(1e-9,a3), 4));
+  }
+  function set(id,v){ var e=$(id); if(e) e.textContent = v; }
+  if(rot) rot.addEventListener('input', function(){
+    set('v-proj-rot', (+this.value).toFixed(0)+'°'); draw();
+  });
+  if(dist) dist.addEventListener('input', function(){
+    set('v-proj-dist', (+this.value).toFixed(1)); draw();
+  });
+  draw();
+  /* tris 导出给校验脚本：本节最容易写错的是相机符号（前移写成 +d 就把
+     三角形放到摄像机背后，透视除法得到 w < 0，画面整个翻面）。
+     不导出就没法从外面断言那三个顶点的 w 全为正。 */
+  return { draw:draw, tris:tris };
+})();
+
+/* ==================================================================
+   §3 边缘函数与重心坐标
+   ------------------------------------------------------------------
+   这一节要证明一个精确不变量（校验脚本会断言它）：
+     用「不归一化的边缘函数」当权重插值，结果恰好等于正确答案 × Σ。
+   Σ 就是三角形的两倍面积 —— 所以面积一变，错误就跟着整体缩放；
+   在「恰好单位面积」的测试三角形上，这个错误完全看不出来。
+   ================================================================== */
+var edgeSec = (function(){
+  var cv = $('cv-edge');
+  if(!cv) return null;
+  var sel = $('sel-edge'), cbW = $('cb-edge-wrong'), btR = $('btn-edge-reset');
+  var VW = 160, VH = 90;              /* 逻辑场尺寸 */
+  var NORM = [[0.13,0.78],[0.87,0.66],[0.44,0.16]];
+  var V = NORM.map(function(p){ return {x:p[0]*VW, y:p[1]*VH}; });
+  var mouse = {x:VW*0.5, y:VH*0.5, inside:true};
+  var dragIdx = -1;
+  /* 每个顶点携带一个标量（这里当「温度」用），用来演示插值 */
+  var SCALAR = [1.0, 0.0, 0.25];
+  var mode = 'sign', wrong = false;
+
+  function fbsize(){
+    var f = fit(cv);
+    var W = VW, H = Math.max(30, Math.round(W*f.h/Math.max(1,f.w)));
+    return {f:f, W:W, H:H};
+  }
+  function draw(){
+    var sz = fbsize(), f = sz.f, ctx = f.ctx, W = sz.W, H = sz.H;
+    var fb = makeFB(W, H);
+    fbClear(fb, 0.047,0.063,0.090);
+    /* 顶点按场尺寸等比映射（画布纵横比可能与逻辑场不同） */
+    var vs = V.map(function(p){ return {x:p.x/VW*W, y:p.y/VH*H}; });
+    var v0=vs[0], v1=vs[1], v2=vs[2];
+    var sgn = windingSign(v0,v1,v2);
+    var A2 = sgn*area2(v0,v1,v2);           /* 归一化后的两倍面积（正） */
+
+    /* ---- 逐像素画场 ---- */
+    for(var y=0;y<H;y++){
+      for(var x=0;x<W;x++){
+        var px = x+0.5, py = y+0.5;
+        var e0 = sgn*Efun(v0.x,v0.y, v1.x,v1.y, px,py);
+        var e1 = sgn*Efun(v1.x,v1.y, v2.x,v2.y, px,py);
+        var e2 = sgn*Efun(v2.x,v2.y, v0.x,v0.y, px,py);
+        var col = null;
+        if(mode === 'sign'){
+          /* 三条边的符号各占一个通道：全正 = 内部，亮 */
+          var r = e0 > 0 ? 0.20 : 0.02, g = e1 > 0 ? 0.20 : 0.02, b = e2 > 0 ? 0.20 : 0.02;
+          if(e0>0 && e1>0 && e2>0){ r=0.30; g=0.55; b=0.85; }
+          col = [r,g,b];
+        } else if(mode === 'bary'){
+          var s = e0+e1+e2;
+          var l0 = s !== 0 ? e0/s : 0, l1 = s !== 0 ? e1/s : 0, l2 = s !== 0 ? e2/s : 0;
+          var band = Math.floor(Math.max(l0,l1,l2)*10);
+          var on = ((band % 2) === 0);
+          var inside2 = (e0>=0 && e1>=0 && e2>=0);
+          if(!inside2){ col = [0.047,0.063,0.090]; }
+          else {
+            var t = Math.max(l0,l1,l2);
+            col = [0.12 + 0.62*t, 0.16 + 0.34*t, 0.30 + 0.42*(1-t)];
+            if(on && t > 0.34) col = [col[0]*1.25, col[1]*1.25, col[2]*1.25];
+          }
+        } else {
+          var s3 = e0+e1+e2;
+          var inside3 = (e0>=0 && e1>=0 && e2>=0);
+          if(!inside3){ col = [0.047,0.063,0.090]; }
+          else {
+            var m = Math.max(e0, Math.max(e1,e2));
+            /* 谁的面积最大，就归属谁 —— 面积在这里就是 |E|/2 */
+            col = (m === e0) ? [0.78,0.30,0.34] : (m === e1 ? [0.22,0.66,0.50] : [0.34,0.46,0.86]);
+          }
+        }
+        fb.col[(y*W+x)*3  ] = col[0];
+        fb.col[(y*W+x)*3+1] = col[1];
+        fb.col[(y*W+x)*3+2] = col[2];
+      }
+    }
+    blitFB(fb, ctx, f.w, f.h);
+    var sx = f.w/W, sy = f.h/H;
+    /* ---- 三角形与顶点 ---- */
+    ctx.strokeStyle = '#e8eef8'; ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(vs[0].x*sx, vs[0].y*sy);
+    ctx.lineTo(vs[1].x*sx, vs[1].y*sy);
+    ctx.lineTo(vs[2].x*sx, vs[2].y*sy);
+    ctx.closePath(); ctx.stroke();
+    for(var i=0;i<3;i++){
+      ctx.fillStyle = i===0?'#ff8fa3':(i===1?'#5fd0a8':'#8fa8ff');
+      ctx.beginPath(); ctx.arc(vs[i].x*sx, vs[i].y*sy, 5, 0, 6.284); ctx.fill();
+    }
+    /* ---- 鼠标处的读数 ---- */
+    var mx = clamp(mouse.x,0,W-1e-3), my = clamp(mouse.y,0,H-1e-3);
+    var b = baryScreen(v0,v1,v2, mx, my);
+    var good = b.l0*SCALAR[0] + b.l1*SCALAR[1] + b.l2*SCALAR[2];
+    var e0m = sgn*Efun(v0.x,v0.y, v1.x,v1.y, mx,my);
+    var e1m = sgn*Efun(v1.x,v1.y, v2.x,v2.y, mx,my);
+    var e2m = sgn*Efun(v2.x,v2.y, v0.x,v0.y, mx,my);
+    /* 不归一化 = 用 sgn·E 直接当权重 ⇒ 结果恰好 = 正确值 × Σ */
+    var bad = e0m*SCALAR[0] + e1m*SCALAR[1] + e2m*SCALAR[2];
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(mx*sx-9, my*sy); ctx.lineTo(mx*sx+9, my*sy);
+    ctx.moveTo(mx*sx, my*sy-9); ctx.lineTo(mx*sx, my*sy+9); ctx.stroke();
+    tag(ctx, mx*sx+12, my*sy-8, 'λ = '+fmt(b.l0,2)+' / '+fmt(b.l1,2)+' / '+fmt(b.l2,2), '#cfe0ff');
+    if(wrong) tag(ctx, 10, 18, '不归一化：结果被放大了 Σ = '+fmt(b.sum,2)+' 倍', '#ff8fa3');
+    else      tag(ctx, 10, 18, '归一化：λ 之和恒为 1', '#5fd0a8');
+
+    set('ed-E', fmt(e0m,1)+' / '+fmt(e1m,1)+' / '+fmt(e2m,1));
+    set('ed-S', fmt(b.sum,2));
+    set('ed-lam', fmt(b.l0,4)+' / '+fmt(b.l1,4)+' / '+fmt(b.l2,4));
+    set('ed-sum', fmt(b.l0+b.l1+b.l2, 6));
+    set('ed-interp', fmt(good,4));
+    set('ed-interpbad', fmt(bad,3));
+    var eS = $('ed-sum'); if(eS) eS.className = 'v ok';
+    var eB = $('ed-interpbad'); if(eB) eB.className = 'v no';
+  }
+  function set(id,v){ var e=$(id); if(e) e.textContent = v; }
+  function pos(e){
+    var r = cv.getBoundingClientRect();
+    var x = (e.clientX === undefined ? 0 : e.clientX - r.left);
+    var y = (e.clientY === undefined ? 0 : e.clientY - r.top);
+    return { x: clamp(x,0,r.width), y: clamp(y,0,r.height), W:r.width, H:r.height };
+  }
+  function onDown(e){
+    var p = pos(e), hit = -1, best = 22;
+    for(var i=0;i<3;i++){
+      var vx = V[i].x/VW*p.W, vy = V[i].y/VH*p.H;
+      var d = Math.hypot(vx-p.x, vy-p.y);
+      if(d < best){ best = d; hit = i; }
+    }
+    dragIdx = hit;
+  }
+  function onMove(e){
+    var p = pos(e);
+    if(dragIdx >= 0){
+      V[dragIdx].x = clamp(p.x/p.W*VW, 1, VW-1);
+      V[dragIdx].y = clamp(p.y/p.H*VH, 1, VH-1);
+    }
+    mouse.x = p.x/p.W*VW; mouse.y = p.y/p.H*VH;
+    draw();
+  }
+  cv.addEventListener('pointerdown', onDown);
+  cv.addEventListener('pointermove', onMove);
+  cv.addEventListener('pointerup', function(){ dragIdx = -1; });
+  if(sel) sel.addEventListener('change', function(){ mode = this.value; draw(); });
+  if(cbW) cbW.addEventListener('change', function(){ wrong = this.checked; draw(); });
+  if(btR) btR.addEventListener('click', function(){ V = NORM.map(function(p){ return {x:p[0]*VW, y:p[1]*VH}; }); draw(); });
+  draw();
+  return { draw:draw, V:V, VW:VW, VH:VH, SCALAR:SCALAR };
+})();
+
+/* ==================================================================
+   §4 覆盖范围收缩
+   ------------------------------------------------------------------
+   计数器是这一节的证据：同一三角形，三种策略测了多少个像素。
+   「测试 / 覆盖」的比值才是衡量图元效率的量。
+   ================================================================== */
+var coverSec = (function(){
+  var cv = $('cv-cover');
+  if(!cv) return null;
+  var sel = $('sel-cover'), btR = $('btn-cover-reset');
+  var VW = 160, VH = 110;
+  var NORM = [[0.20,0.80],[0.80,0.72],[0.48,0.14]];
+  var V = NORM.map(function(p){ return {x:p[0]*VW, y:p[1]*VH}; });
+  var mode = 'scan', dragIdx = -1;
+  var stats = null;
+  function draw(){
+    var f = fit(cv), W = VW, H = Math.max(30, Math.round(W*f.h/Math.max(1,f.w)));
+    var fb = makeFB(W,H);
+    fbClear(fb, 0.047,0.063,0.090);
+    var vs = V.map(function(p){ return mkVert(p.x/VW*W, p.y/VH*H); });
+    var mask = new Uint8Array(W*H);
+    var cnt = { tested:0, covered:0 };
+    rasterTri(fb, vs[0], vs[1], vs[2], {
+      mode:mode, rule:'tl', ztest:false, cnt:cnt,
+      shade:function(){ return [0.16,0.62,0.46]; }
+    });
+    /* 用 mask 给底色补上「测过但没过」的暗红，让收缩范围一眼可见 */
+    for(var i=0;i<W*H;i++){
+      if(fb.cover[i] > 0) continue;
+      if(mask[i] === 1){ fb.col[i*3]=0.40; fb.col[i*3+1]=0.10; fb.col[i*3+2]=0.16; }
+    }
+    blitFB(fb, f.ctx, f.w, f.h);
+    var sx = f.w/W, sy = f.h/H;
+    var ctx = f.ctx;
+    /* 包围盒 */
+    var mnx = Math.min(vs[0].x,vs[1].x,vs[2].x), mxx = Math.max(vs[0].x,vs[1].x,vs[2].x);
+    var mny = Math.min(vs[0].y,vs[1].y,vs[2].y), mxy = Math.max(vs[0].y,vs[1].y,vs[2].y);
+    rect(ctx, mnx*sx, mny*sy, (mxx-mnx)*sx, (mxy-mny)*sy, '#f0b429', 1.4, [5,4]);
+    tag(ctx, mnx*sx+4, mny*sy-5, '包围盒', '#f0b429');
+    ctx.strokeStyle = '#e8eef8'; ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(vs[0].x*sx, vs[0].y*sy);
+    ctx.lineTo(vs[1].x*sx, vs[1].y*sy);
+    ctx.lineTo(vs[2].x*sx, vs[2].y*sy);
+    ctx.closePath(); ctx.stroke();
+    for(var k=0;k<3;k++){
+      ctx.fillStyle = '#ff8fa3';
+      ctx.beginPath(); ctx.arc(vs[k].x*sx, vs[k].y*sy, 5, 0, 6.284); ctx.fill();
+    }
+    var bboxPx = (Math.min(W-1,Math.ceil(mxx)) - Math.max(0,Math.floor(mnx)) + 1) *
+                 (Math.min(H-1,Math.ceil(mxy)) - Math.max(0,Math.floor(mny)) + 1);
+    stats = { total:W*H, tested:cnt.tested, covered:cnt.covered, bbox:bboxPx };
+    var modeName = mode==='full'?'全屏遍历':(mode==='bbox'?'包围盒':'扫描线');
+    var pf = $('pf-cover'); if(pf) pf.textContent = modeName + ' · ' + W + '×' + H;
+    set('cv-total', W*H);
+    set('cv-tested', cnt.tested);
+    set('cv-bbox', bboxPx);
+    set('cv-hit', cnt.covered);
+    set('cv-eff', fmt(cnt.tested/Math.max(1,cnt.covered),2)+'×');
+    set('cv-bbratio', fmt(100*bboxPx/(W*H),1)+'%');
+  }
+  function set(id,v){ var e=$(id); if(e) e.textContent = v; }
+  function pos(e){
+    var r = cv.getBoundingClientRect();
+    var x = (e.clientX===undefined?0:e.clientX - r.left), y = (e.clientY===undefined?0:e.clientY - r.top);
+    return {x:clamp(x,0,r.width), y:clamp(y,0,r.height), W:r.width, H:r.height};
+  }
+  cv.addEventListener('pointerdown', function(e){
+    var p = pos(e), hit = -1, best = 24;
+    for(var i=0;i<3;i++){
+      var d = Math.hypot(V[i].x/VW*p.W - p.x, V[i].y/VH*p.H - p.y);
+      if(d < best){ best = d; hit = i; }
+    }
+    dragIdx = hit;
+  });
+  cv.addEventListener('pointermove', function(e){
+    if(dragIdx < 0) return;
+    var p = pos(e);
+    V[dragIdx].x = clamp(p.x/p.W*VW, 1, VW-1);
+    V[dragIdx].y = clamp(p.y/p.H*VH, 1, VH-1);
+    draw();
+  });
+  cv.addEventListener('pointerup', function(){ dragIdx = -1; });
+  if(sel) sel.addEventListener('change', function(){ mode = this.value; draw(); });
+  if(btR) btR.addEventListener('click', function(){ V = NORM.map(function(p){ return {x:p[0]*VW, y:p[1]*VH}; }); draw(); });
+  draw();
+  return { draw:draw, stats:function(){ return stats; }, setMode:function(m){ mode=m; draw(); } };
+})();
+
+/* ==================================================================
+   §5 填充规则与水密性
+   ------------------------------------------------------------------
+   几何是刻意构造的：共享边**正好穿过像素中心**，否则边界分支永远走不到。
+   · 对角共享边取 y = x（像素中心都在 y=x 上）
+   · 水平共享边取 y = k + 0.5（像素中心的 y 就是 k + 0.5）
+   判定标准：把两个三角形的覆盖次数相加，属于并集的像素必须恰好为 1。
+   ================================================================== */
+var fillSec = (function(){
+  var cv = $('cv-fill');
+  if(!cv) return null;
+  var sel = $('sel-fill-rule'), rz = $('r-fill-zoom');
+  var W = 40, H = 56;
+  /* 两组：第一组共享一条对角边（y = x），第二组共享一条水平边（y = 40.5） */
+  var G1 = [ [[4,4],[20,4],[20,20]], [[4,4],[20,20],[4,20]] ];
+  var G2 = [ [[4,40.5],[20,40.5],[12,34.5]], [[4,40.5],[20,40.5],[12,46.5]] ];
+  var GROUPS = [G1, G2];
+  var rule = 'tl';
+  var stat = null;
+  function verts(tri){ return tri.map(function(p){ return mkVert(p[0], p[1]); }); }
+  function build(){
+    var fb = makeFB(W,H);
+    fbClear(fb, 0.047,0.063,0.090);
+    var gi, ti;
+    for(gi=0; gi<GROUPS.length; gi++){
+      for(ti=0; ti<GROUPS[gi].length; ti++){
+        var v = verts(GROUPS[gi][ti]);
+        rasterTri(fb, v[0], v[1], v[2], {
+          mode:'bbox', rule:rule, ztest:false,
+          shade:function(){ return [0.16,0.62,0.46]; }
+        });
+      }
+    }
+    /* 并集归属：用「边界一律接受」单独跑一遍，得到每个内部像素的应然归属 */
+    var uni = makeFB(W,H);
+    fbClear(uni, 0,0,0);
+    for(gi=0; gi<GROUPS.length; gi++){
+      for(ti=0; ti<GROUPS[gi].length; ti++){
+        var v2 = verts(GROUPS[gi][ti]);
+        rasterTri(uni, v2[0], v2[1], v2[2], {
+          mode:'bbox', rule:'all', ztest:false, shade:flatShade([0,0,0])
+        });
+      }
+    }
+    var zero = 0, two = 0, one = 0;
+    for(var i=0;i<W*H;i++){
+      if(uni.cover[i] === 0) continue;      /* 不属于并集，不计入 */
+      if(fb.cover[i] === 0) zero++;
+      else if(fb.cover[i] >= 2) two++;
+      else one++;
+    }
+    stat = { zero:zero, two:two, one:one };
+    return {fb:fb, uni:uni};
+  }
+  function draw(){
+    var r = build();
+    var f = fit(cv), ctx = f.ctx;
+    var leftW = f.w*0.62;
+    /* 覆盖分类上色：0 → 玫瑰，1 → 青，2 → 琥珀。
+       不做分辨率放大 —— 一个像素就是一个可见方格，正合本节要讲的事。 */
+    var ov = makeFB(W,H);
+    fbClear(ov, 0.047,0.063,0.090);
+    for(var i=0;i<W*H;i++){
+      var c = r.fb.cover[i];
+      var col = c===0 ? [0.72,0.16,0.30] : (c===1 ? [0.10,0.52,0.42] : [0.85,0.60,0.16]);
+      ov.col[i*3]=col[0]; ov.col[i*3+1]=col[1]; ov.col[i*3+2]=col[2];
+    }
+    /* 等比放大：屏幕上的方格必须是正方形，否则「一个像素」这句话就没有意义 */
+    var scale = Math.min(leftW/W, f.h/H);
+    blitFB(ov, ctx, W*scale, H*scale);
+    var sx = scale, sy = scale;
+    ctx.strokeStyle = 'rgba(232,238,248,0.75)'; ctx.lineWidth = 1;
+    for(var g2=0; g2<GROUPS.length; g2++)
+      for(var t2=0; t2<GROUPS[g2].length; t2++){
+        var P = GROUPS[g2][t2];
+        ctx.beginPath();
+        ctx.moveTo(P[0][0]*sx, P[0][1]*sy);
+        ctx.lineTo(P[1][0]*sx, P[1][1]*sy);
+        ctx.lineTo(P[2][0]*sx, P[2][1]*sy);
+        ctx.closePath(); ctx.stroke();
+      }
+    tag(ctx, 8, 18, '左：全图（绿=1 次 · 琥珀=2 次 · 玫瑰=0 次）', '#c8d2e4');
+
+    /* 放大窗：对角共享边中点像素 (12,12) 周围 9×9 */
+    var zoom = rz ? +rz.value : 18;
+    var zx = f.w*0.68, zy = 26, maxW = f.w*0.30, maxH = f.h-40;
+    var cell = Math.min(maxW/9, maxH/9, zoom);
+    var ox2 = 12 - 4, oy2 = 12 - 4;      /* 窗口左上角对应的像素坐标 */
+    ctx.save();
+    ctx.fillStyle = 'rgba(4,7,12,0.72)';
+    ctx.fillRect(zx-6, zy-6, cell*9+12, cell*9+12);
+    for(var yy=0; yy<9; yy++){
+      for(var xx=0; xx<9; xx++){
+        var px = ox2 + xx, py = oy2 + yy;
+        var cov = (px>=0&&px<W&&py>=0&&py<H) ? r.fb.cover[py*W+px] : -1;
+        ctx.fillStyle = cov===0 ? '#b8274d' : (cov===1 ? '#1a8a70' : (cov===2 ? '#d99a29' : '#1b2230'));
+        ctx.fillRect(zx+xx*cell, zy+yy*cell, cell-1, cell-1);
+        /* 把次数直接写进格子。只靠颜色是不够的：琥珀与玫瑰在小格子里
+           很难分，而且「缝」与「重复」恰恰是本节的结论，必须能一眼读出数字。
+           cell 太小时不写，免得糊成一团。 */
+        if(cov >= 0 && cell >= 13){
+          tag(ctx, zx+xx*cell+cell*0.5, zy+yy*cell+cell*0.5+4,
+              String(cov), cov===1 ? '#dff5ef' : '#fff8ec', 'center');
+        }
+      }
+    }
+    /* 共享边的位置：G1 的对角边是 y = x，像素中心在 (i+0.5, i+0.5)，
+       所以线正好穿过每个方格的中心。终点只画到窗口右下角那一格，
+       不要多画一格 —— 之前写成 + cell*9，线尾巴伸到窗外去了。 */
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(zx + (ox2+0.5)*cell, zy + (oy2+0.5)*cell);
+    ctx.lineTo(zx + (ox2+8+0.5)*cell, zy + (oy2+8+0.5)*cell);
+    ctx.stroke();
+    ctx.restore();
+    tag(ctx, zx-6, zy-12, '对角共享边（y = x）上的 9×9 像素 · 数字 = 覆盖次数', '#c8d2e4');
+
+    set('fl-zero', stat.zero);
+    set('fl-two', stat.two);
+    set('fl-one', stat.one);
+    var vd = $('fl-verdict');
+    if(vd){
+      if(stat.zero === 0 && stat.two === 0){ vd.textContent = '水密 ✅'; vd.className = 'v ok'; }
+      else { vd.textContent = (stat.zero?stat.zero+' 缝 ':'' ) + (stat.two?stat.two+' 重复':'') + ' ❌'; vd.className='v no'; }
+    }
+  }
+  function set(id,v){ var e=$(id); if(e) e.textContent = v; }
+  if(sel) sel.addEventListener('change', function(){ rule = this.value; draw(); });
+  if(rz) rz.addEventListener('input', function(){ set('v-fill-zoom', this.value+'×'); draw(); });
+  draw();
+  return { draw:draw, stat:function(){ return stat; }, setRule:function(r){ rule = r; draw(); }, W:W, H:H, GROUPS:GROUPS };
+})();
+
+/* 带偏移的上屏（用于在画布角落嵌一张深度缓冲可视化） */
+function blitAt(fb, ctx, dx, dy, w, h){
+  var img = fillImage(fb);
+  off.width = fb.W; off.height = fb.H;
+  var octx = off.getContext('2d');
+  octx.putImageData(img, 0, 0);
+  ctx.fillStyle = VP_BLOCK; ctx.fillRect(dx, dy, w, h);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(off, dx, dy, w, h);
+}
+var VP_BLOCK = '#060a10';
+
+/* float32 在 x 处的绝对表示间距。reverse-Z 的全部收益来自这个函数：
+   它的指数分布让「靠近 0」的值比「靠近 1」的值密得多。 */
+function eps32(x){
+  var a = Math.abs(x);
+  if(!(a > 0)) return Math.pow(2,-149);
+  var e = Math.floor(Math.log2(a));
+  if(e < -126) return Math.pow(2,-149);
+  return Math.pow(2, e-23);
+}
+
+/* ==================================================================
+   §6 深度缓冲
+   ------------------------------------------------------------------
+   两条必须同时成立的结论，代码里都算出来了：
+     · z01 = (f/(f−n))·(1 − n/w) 是 1/w 的仿射函数，而 1/w 在屏幕空间线性
+       ⇒ 深度可以直接用屏幕空间重心坐标线性插值（不需要透视校正）
+     · 这条式子同时说明深度精度是双曲的：near 附近极密、远处极疏
+   ================================================================== */
+var depthSec = (function(){
+  var cv = $('cv-depth'), cz = $('cv-zchart');
+  if(!cv) return null;
+  var sel = $('sel-depth'), cbR = $('cb-reverse-z');
+  var rn = $('r-near'), rf = $('r-far');
+  var mode = 'ztest', reverse = false;
+  var W = 160, Hh = 110;
+  var NEAR = 0.5, FAR = 120;
+
+  /* 场景：一块灰色底板 + 三块与之重叠的彩色板 + 一块斜插穿地面的板。
+     （这里曾被写成「地面 + 三面墙」，但代码里四块板的 y 全是 0 —— 注释和实现对不上。
+       现在按实际构造写：三块彩色板各自抬高 0.08 的整数倍，理由见 quad 之前的注释。）
+     绘制顺序刻意是「近的先画」—— 关掉深度测试时，近处的东西会被远处覆盖，
+     这正是画家算法在错序下的失败形态。 */
+  function scene(){
+    var view = makeView(v3(0, 1.15, 0), 0, -0.10);
+    var pr = makeProj(W, Hh, 60, NEAR, FAR);
+    var quads = [];
+    /* 一个四边形拆成两个三角形。高光强度借用插值通道 u 携带 ——
+       省得为「每个三角形一个标量」再加一套参数。 */
+    function quad(p, col, spec){
+      var a = p.map(function(q){ return view(v3(q[0],q[1],q[2])); });
+      var n = nrm3(cross3(sub3(a[1],a[0]), sub3(a[2],a[0])));
+      var sp = (spec===undefined?0.35:spec);
+      var sv = a.map(function(v){
+        var q = pr(v);
+        return { x:q.x, y:q.y, w:q.w, z:q.z, u:sp,
+                 nx:n.x, ny:n.y, nz:n.z, r:col[0], g:col[1], b:col[2] };
+      });
+      quads.push([sv[0],sv[1],sv[2]]);
+      quads.push([sv[0],sv[2],sv[3]]);
+    }
+    /* 四块板**层层抬高一点点**，而不是全部躺在 y=0 上。
+       为什么必须抬高：它们在地面上互相重叠，如果严格共面，重叠处的深度就完全相等，
+       于是「谁赢」由 float 舍入决定 —— 标准 Z 与反 Z 会把同一处平局判给不同的板，
+       两幅画面在 3600 多个像素上颜色不同（实测过：橙 vs 青，肉眼一眼能看出）。
+       那会让「反 Z 只改精度不改结果」这句话在画面上**看起来是错的**。
+       给每层 0.08 的高差，深度差就远大于该处的表示间距（最远处也差 6 倍以上），
+       深度测试重新变成良定问题；而「画家算法失败」那条演示不受影响 ——
+       它靠的是「按平均深度排序」排错了重叠的板，与共面无关。 */
+    quad([[-6,0,      -13],[ 6,0,      -13],[ 6,0,      -1.2],[-6,0,      -1.2]], [0.20,0.24,0.30], 0.05);
+    quad([[-1.2,0.24,-3.4],[ 4.6,0.24,-3.4],[ 4.6,0.24,-0.9],[-1.2,0.24,-0.9]], [0.72,0.52,0.18], 0.30);
+    quad([[-5.0,0.16,-6.2],[ 0.8,0.16,-6.2],[ 0.8,0.16,-2.0],[-5.0,0.16,-2.0]], [0.12,0.58,0.50], 0.30);
+    quad([[-4.4,0.08,-9.6],[ 3.4,0.08,-9.6],[ 3.4,0.08,-5.4],[-4.4,0.08,-5.4]], [0.30,0.38,0.74], 0.30);
+    /* 斜板：与地面**相交**，画家算法对它必错。
+       位置是量出来的，不是摆出来的：原来它在屏幕中段横跨 x≈43..149，
+       正好压住蓝板所在的那条横带（y 67..77），结果蓝板只剩 32 个可见像素 ——
+       几乎等于这一节只有四块板。左移 2.2、横向收窄到 0.6 倍之后，
+       五块板的可见像素是 965 / 5417 / 1463 / 393 / 1230，最少的那块也有 393。
+       它仍然贯穿 y=0、0.08、0.16、0.24 四个高度，所以「互相穿插」这条演示没有削弱。 */
+    quad([[-4.12,1.8,-8.2],[-0.64,1.8,-6.0],[-0.64,-0.2,-3.6],[-4.12,-0.2,-5.8]], [0.78,0.22,0.38], 0.45);
+    return quads;
+  }
+  function drawScene(){
+    var f = fit(cv), ctx = f.ctx;
+    var fb = makeFB(W,Hh);
+    fbClear(fb, 0.047,0.063,0.090, reverse);
+    var quads = scene();
+    var pts = [];
+    for(var i=0;i<quads.length;i++) pts.push(quads[i]);
+    /* 顺序：近的先画（错误顺序），深度测试开着时不影响结果 */
+    pts.sort(function(a,b){
+      var za = (a[0].z+a[1].z+a[2].z)/3, zb = (b[0].z+b[1].z+b[2].z)/3;
+      return za - zb;
+    });
+    var opt = {
+      mode:'bbox', rule:'tl', reverse:reverse,
+      ztest: mode !== 'off',
+      depthPersp: mode === 'world',
+      shade:function(px,py,P,at){
+        return blinnPhong({x:at.nx, y:at.ny, z:at.nz}, [at.r, at.g, at.b], at.u);
+      }
+    };
+    for(var t=0;t<pts.length;t++) rasterTri(fb, pts[t][0], pts[t][1], pts[t][2], opt);
+    blitFB(fb, ctx, f.w, f.h);
+    /* 深度缓冲可视化：右下角 */
+    var zv = makeFB(W,Hh);
+    var zmin = Infinity, zmax = -Infinity, k;
+    for(k=0;k<W*Hh;k++){
+      var zz = reverse ? 1 - fb.z[k] : fb.z[k];
+      if(fb.cover[k] > 0){ if(zz<zmin) zmin=zz; if(zz>zmax) zmax=zz; }
+    }
+    for(k=0;k<W*Hh;k++){
+      var v = reverse ? 1 - fb.z[k] : fb.z[k];
+      var g = fb.cover[k] > 0
+        ? clamp((v - zmin)/Math.max(1e-6, zmax-zmin), 0, 1) : 0.10;
+      zv.col[k*3]=g; zv.col[k*3+1]=g; zv.col[k*3+2]=g;
+    }
+    var iw = Math.round(f.w*0.30), ih = Math.round(f.h*0.30);
+    blitAt(zv, ctx, f.w-iw-8, f.h-ih-8, iw, ih);
+    rect(ctx, f.w-iw-8, f.h-ih-8, iw, ih, '#5c6a80', 1);
+    tag(ctx, f.w-iw-4, f.h-ih-12, '深度缓冲', '#9fb0c8');
+    var nm = mode==='off'?'深度测试：关闭（按绘制顺序覆盖）'
+           : (mode==='world'?'深度测试：开，但深度做了透视校正（错）'
+                            : '深度测试：开启（正确）');
+    tag(ctx, 10, 18, nm + (reverse?' · reverse-Z':''), mode==='ztest'?'#5fd0a8':'#ff8fa3');
+    return { fb:fb, zmin:zmin, zmax:zmax };
+  }
+
+  /* 精度曲线：可分辨的世界距离 = 表示间距 / |d(stored)/dd| */
+  function curve(n, f, rev){
+    var pts = [], N = 200, i;
+    var A = f/(f-n);
+    for(i=0;i<N;i++){
+      var d = n*Math.pow(f/n, i/(N-1));
+      var z01 = A*(1 - n/d);
+      var slope = A*n/(d*d);                 /* |dz01/dd| */
+      var stored = rev ? 1 - z01 : z01;
+      pts.push({ d:d, res: eps32(stored)/slope });
+    }
+    return pts;
+  }
+  function resAt(n,f,rev,d){
+    var A = f/(f-n), z01 = A*(1-n/d), slope = A*n/(d*d);
+    return eps32(rev ? 1-z01 : z01)/slope;
+  }
+  function drawChart(){
+    var f = fit(cz), ctx = f.ctx;
+    ctx.fillStyle = VP_BG; ctx.fillRect(0,0,f.w,f.h);
+    var pad = {l:64, r:14, t:26, b:26};
+    var pw = f.w-pad.l-pad.r, ph = f.h-pad.t-pad.b;
+    var cs = curve(NEAR, FAR, false), cr = curve(NEAR, FAR, true);
+    var all = cs.concat(cr), i;
+    var lo = Infinity, hi = -Infinity;
+    for(i=0;i<all.length;i++){
+      var v = Math.log10(Math.max(1e-30, all[i].res));
+      if(v<lo) lo=v; if(v>hi) hi=v;
+    }
+    lo = Math.floor(lo-0.4); hi = Math.ceil(hi+0.4);
+    function X(d){ return pad.l + pw*Math.log(d/NEAR)/Math.log(FAR/NEAR); }
+    function Y(v){ return pad.t + ph*(1 - (Math.log10(Math.max(1e-30,v)) - lo)/(hi-lo)); }
+    /* 网格 */
+    ctx.strokeStyle = '#1b2230'; ctx.lineWidth = 1;
+    for(i=lo;i<=hi;i++){
+      ctx.beginPath(); ctx.moveTo(pad.l, Y(Math.pow(10,i))); ctx.lineTo(pad.l+pw, Y(Math.pow(10,i))); ctx.stroke();
+      tag(ctx, pad.l-8, Y(Math.pow(10,i))+4, '1e'+i, '#6f7d92', 'right');
+    }
+    function line(pts, col){
+      ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.beginPath();
+      for(var k=0;k<pts.length;k++){
+        var x = X(pts[k].d), y = Y(pts[k].res);
+        if(k===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+    }
+    line(cs, '#ff6b8a');
+    line(cr, '#5fd0a8');
+    tag(ctx, pad.l+6, pad.t-10, '标准 Z（近端过剩 / 远端崩溃）', '#ff6b8a');
+    tag(ctx, pad.l+6, pad.t+2, 'reverse-Z（把精度拉平）', '#5fd0a8');
+    ctx.strokeStyle = '#3d4657'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad.l, pad.t+ph); ctx.lineTo(pad.l+pw, pad.t+ph); ctx.stroke();
+    tag(ctx, pad.l, f.h-8, 'world d = '+fmt(NEAR,2)+'（near）', '#6f7d92');
+    tag(ctx, pad.l+pw, f.h-8, 'd = '+fmt(FAR,0)+'（far）', '#6f7d92', 'right');
+    tag(ctx, 8, 18, '可分辨的世界距离（对数轴）', '#8fa0b8');
+  }
+  function update(){
+    var n = rn?+rn.value:NEAR, fa = rf?+rf.value:FAR;
+    NEAR = n; FAR = fa;
+    set('v-near', fmt(n,2)); set('v-far', fmt(fa,0));
+    drawScene(); drawChart();
+    var dNear = n*1.02, dFar = fa*0.98;
+    var sN = resAt(n,fa,false,dNear), sF = resAt(n,fa,false,dFar);
+    var rN = resAt(n,fa,true,dNear),  rF = resAt(n,fa,true,dFar);
+    set('dp-formula', '(f/(f−n))(1−n/w)');
+    set('dp-near', sci(sN));
+    set('dp-far', sci(sF));
+    set('dp-ratio', sci(sF/Math.max(1e-30,sN)));
+    set('dp-nf', 'reverse ' + sci(rF/Math.max(1e-30,rN)));
+  }
+  function set(id,v){ var e=$(id); if(e) e.textContent = v; }
+  if(sel) sel.addEventListener('change', function(){ mode = this.value; update(); });
+  if(cbR) cbR.addEventListener('change', function(){ reverse = this.checked; update(); });
+  if(rn) rn.addEventListener('input', update);
+  if(rf) rf.addEventListener('input', update);
+  update();
+  return { update:update, resAt:resAt, eps32:eps32, z01of:z01of,
+           getScene:function(){ return scene(); }, W:W, H:Hh, NEAR:function(){return NEAR;}, FAR:function(){return FAR;} };
+})();
+
+/* ==================================================================
+   §7 透视校正插值
+   ------------------------------------------------------------------
+   地板由世界坐标给出，uv 直接取世界 x/z —— 于是「纹理对不对」等价于
+   「世界坐标插值对不对」，不需要额外解释纹理坐标从哪来。
+   两条读数把结论钉死：
+     · 1/w 沿屏幕纵向的线性残差 ≈ 0
+     · w 沿屏幕纵向的线性残差很大
+   ================================================================== */
+var perspSec = (function(){
+  var cvA = $('cv-persp-a'), cvB = $('cv-persp-b'), cvW = $('cv-wline');
+  if(!cvA || !cvB) return null;
+  var cbA = $('cb-persp-anim'), rt = $('r-persp-tex'), rp = $('r-persp-pitch');
+  var W = 160, Hh = 110, NEAR = 0.35, FAR = 90;
+  var travel = 0, anim = true, t0 = null, last = null;
+
+  function build(eye, pitch, nTex){
+    var view = makeView(eye, 0, pitch);
+    var pr = makeProj(W, Hh, 58, NEAR, FAR);
+    var fwd = nrm3(v3(Math.sin(0), Math.sin(pitch), -Math.cos(0)*Math.cos(pitch)));
+    var tris = [];
+    /* 地板：x∈[-9,9]，z∈[0.6,16]（取摄像机前方为 −z，这里用世界 +z 向后，故取负） */
+    var GX = 9, GZ0 = -0.6, GZ1 = -16, NX = 8, NZ = 12;
+    function P(x,z){ return v3(x, 0, z); }
+    for(var i=0;i<NX;i++){
+      for(var j=0;j<NZ;j++){
+        var x0 = -GX + 2*GX*i/NX,   x1 = -GX + 2*GX*(i+1)/NX;
+        var z0 = GZ0 + (GZ1-GZ0)*j/NZ, z1 = GZ0 + (GZ1-GZ0)*(j+1)/NZ;
+        var q = [P(x0,z0), P(x1,z0), P(x1,z1), P(x0,z1)];
+        pushQuad(view, pr, q, [0.30,0.34,0.40], [0.34,0.38,0.45], nTex, tris, 1);
+      }
+    }
+    /* 几根柱子，让透视关系更容易看出来 */
+    var posts = [[-5.2,-3.5],[-2.0,-7.5],[2.6,-5.0],[5.6,-10.5],[-6.4,-12.0]];
+    for(var p=0;p<posts.length;p++){
+      var px = posts[p][0], pz = posts[p][1], hh = 1.7, wd = 0.34;
+      pushQuad(view, pr, [P(px-wd,0,pz+wd),P(px+wd,0,pz+wd),P(px+wd,hh,pz+wd),P(px-wd,hh,pz+wd)],
+               [0.62,0.44,0.78], [0.72,0.52,0.86], nTex, tris, 0);
+    }
+    return { tris:tris, view:view, fwd:fwd, pr:pr };
+  }
+  function pushQuad(view, pr, q, cA, cB, nTex, out, checkered){
+    var n = nrm3(cross3(sub3(q[1],q[0]), sub3(q[2],q[0])));
+    var sv = q.map(function(p){
+      var v = view(p), s = pr(v);
+      var h = checkered ? (Math.floor(p.x*nTex/2) + Math.floor(p.z*nTex/2)) : 0;
+      var col = checkered ? ((h & 1) ? cA : cB) : cA;
+      return { x:s.x, y:s.y, w:s.w, z:s.z, u:p.x, u2:p.z,
+               nx:n.x, ny:n.y, nz:n.z, r:col[0], g:col[1], b:col[2], wx:p.x, wz:p.z };
+    });
+    out.push([sv[0],sv[1],sv[2]]);
+    out.push([sv[0],sv[2],sv[3]]);
+  }
+  function shadeChecker(px, py, P, at){
+    var hh = Math.floor(at.u*TEXN/2) + Math.floor(at.u2*TEXN/2);
+    var base = (hh & 1) ? [0.26,0.29,0.35] : [0.62,0.66,0.72];
+    return blinnPhong({x:at.nx,y:at.ny,z:at.nz}, base, 0.06, 0.55);
+  }
+  var TEXN = 10;
+  function render(eye, pitch, persp, toCv){
+    var f = fit(toCv), sc = build(eye, pitch, TEXN);
+    var fb = makeFB(W,Hh);
+    fbClear(fb, 0.047,0.063,0.090);
+    var opt = { mode:'bbox', rule:'tl', persp:persp, ztest:true,
+                shade:shadeChecker };
+    for(var i=0;i<sc.tris.length;i++)
+      rasterTri(fb, sc.tris[i][0], sc.tris[i][1], sc.tris[i][2], opt);
+    blitFB(fb, f.ctx, f.w, f.h);
+    return sc;
+  }
+  /* 用「地板对屏幕某一行的 w 值」剖面来判定线性性 */
+  function wProfile(eye, pitch){
+    var view = makeView(eye, 0, pitch);
+    var tanH = Math.tan(58*Math.PI/360), aspect = W/Hh;
+    var cy=Math.cos(0), sy=Math.sin(0), cp=Math.cos(pitch), sp=Math.sin(pitch);
+    var fwd = v3(sy*cp, sp, -cy*cp);
+    var right = nrm3(cross3(fwd, v3(0,1,0)));
+    var up = cross3(right, fwd);
+    var rows = [];
+    for(var py=0; py<Hh; py++){
+      var ndcY = 1 - 2*(py+0.5)/Hh;
+      var dir = add3(add3(mul3(right, 0), mul3(up, ndcY*tanH)), mul3(fwd, 1));
+      if(dir.y >= -1e-6) continue;
+      var s = -eye.y/dir.y;
+      if(!(s > 0)) continue;
+      var pt = add3(eye, mul3(dir, s));
+      var w = dot3(sub3(pt, eye), fwd);
+      if(w <= 0.01) continue;
+      rows.push({ y:py, w:w, inv:1/w });
+    }
+    return rows;
+  }
+  function linResidual(vals){
+    var n = vals.length; if(n < 6) return 0;
+    var sx=0, sy=0, sxx=0, sxy=0, i;
+    for(i=0;i<n;i++){ sx+=i; sy+=vals[i]; sxx+=i*i; sxy+=i*vals[i]; }
+    var den = n*sxx - sx*sx; if(Math.abs(den) < 1e-12) return 0;
+    var a = (n*sxy - sx*sy)/den, b = (sy - a*sx)/n;
+    var mx = 0, scale = 0;
+    for(i=0;i<n;i++){
+      var r = Math.abs(vals[i] - (a*i+b));
+      if(r > mx) mx = r;
+      if(Math.abs(vals[i]) > scale) scale = Math.abs(vals[i]);
+    }
+    return mx/Math.max(1e-12, scale);
+  }
+  function update(){
+    var pitch = -(rp?+rp.value:16)*Math.PI/180;
+    TEXN = rt?+rt.value:10;
+    if(rt) set('v-persp-tex', TEXN);
+    if(rp) set('v-persp-pitch', Math.abs(pitch*180/Math.PI).toFixed(1)+'°');
+    var eye = v3(0, 1.55, -0.2 - (anim ? travel*3.4 : 0.6));
+    var sA = render(eye, pitch, true, cvA);
+    render(eye, pitch, false, cvB);
+    set('v-persp-tex', TEXN);
+    /* ---- 读数 ---- */
+    var wmin = Infinity, wmax = -Infinity, i, k;
+    for(i=0;i<sA.tris.length;i++)
+      for(k=0;k<3;k++){
+        var wq = sA.tris[i][k].w;
+        if(wq<wmin) wmin=wq; if(wq>wmax) wmax=wq;
+      }
+    set('pe-wr', fmt(wmin,2)+' / '+fmt(wmax,1));
+    /* λ 与 λ′ 的最大偏差 + uv 仿射误差峰值（在三角形内按重心网格采样） */
+    var dLam = 0, uvErr = 0;
+    var step = 1/12;
+    for(i=0;i<sA.tris.length;i+=7){
+      var t = sA.tris[i];
+      for(var a=1;a<12;a++) for(var b=1;b<12-a;b++){
+        var l0=a*step, l1=b*step, l2=1-l0-l1;
+        if(l2 < 0.02) continue;
+        var px = l0*t[0].x + l1*t[1].x + l2*t[2].x;
+        var py = l0*t[0].y + l1*t[1].y + l2*t[2].y;
+        var l = baryScreen(t[0],t[1],t[2], px, py);
+        var P = perspWeights(l, t[0].w, t[1].w, t[2].w);
+        var dl = Math.max(Math.abs(P.l0-l.l0), Math.max(Math.abs(P.l1-l.l1), Math.abs(P.l2-l.l2)));
+        if(dl > dLam) dLam = dl;
+        var uCorr = P.l0*t[0].u + P.l1*t[1].u + P.l2*t[2].u;
+        var uAff  = l.l0*t[0].u + l.l1*t[1].u + l.l2*t[2].u;
+        var e2 = Math.abs(uCorr - uAff);
+        if(e2 > uvErr) uvErr = e2;
+      }
+    }
+    set('pe-dlam', fmt(dLam, 4));
+    set('pe-uv', fmt(uvErr, 3));
+    var rows = wProfile(eye, pitch);
+    var invs = rows.map(function(r){ return r.inv; });
+    var ws   = rows.map(function(r){ return r.w; });
+    set('pe-linw',  sci(linResidual(invs)));
+    set('pe-linw2', sci(linResidual(ws)));
+    /* ---- 一维剖面图 ---- */
+    if(cvW){
+      var f = fit(cvW), ctx = f.ctx;
+      ctx.fillStyle = VP_BG; ctx.fillRect(0,0,f.w,f.h);
+      if(rows.length > 4){
+        var padL = 54, padR = 96, padT = 22, padB = 16;
+        var pw = f.w-padL-padR, ph = f.h-padT-padB;
+        var ivMax = Math.max.apply(null, invs), ivMin = Math.min.apply(null, invs);
+        var wMax = Math.max.apply(null, ws), wMin = Math.min.apply(null, ws);
+        var y0 = Math.min.apply(null, rows.map(function(r){return r.y;}));
+        var y1 = Math.max.apply(null, rows.map(function(r){return r.y;}));
+        function XP(py){ return padL + pw*(py - y0)/Math.max(1, y1-y0); }
+        function YI(v){ return padT + ph*(1-(v-ivMin)/Math.max(1e-9, ivMax-ivMin)); }
+        function YW(v){ return padT + ph*(1-(v-wMin)/Math.max(1e-9, wMax-wMin)); }
+        ctx.strokeStyle = '#5fd0a8'; ctx.lineWidth = 2; ctx.beginPath();
+        rows.forEach(function(r,i){ var x=XP(r.y), y=YI(r.inv); i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
+        ctx.stroke();
+        ctx.strokeStyle = '#ff6b8a'; ctx.lineWidth = 2; ctx.beginPath();
+        rows.forEach(function(r,i){ var x=XP(r.y), y=YW(r.w); i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
+        ctx.stroke();
+        /* 对 1/w 做最小二乘直线，叠上去看它是否重合 */
+        var n2 = invs.length, sx=0,sy=0,sxx=0,sxy=0;
+        for(var q=0;q<n2;q++){ sx+=q; sy+=invs[q]; sxx+=q*q; sxy+=q*invs[q]; }
+        var den2 = n2*sxx - sx*sx;
+        var aa = (n2*sxy - sx*sy)/den2, bb = (sy - aa*sx)/n2;
+        ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1;
+        ctx.setLineDash([4,3]); ctx.beginPath();
+        for(var q2=0;q2<n2;q2++){
+          var x2 = XP(rows[q2].y), y2 = YI(aa*q2+bb);
+          q2?ctx.lineTo(x2,y2):ctx.moveTo(x2,y2);
+        }
+        ctx.stroke(); ctx.setLineDash([]);
+        tag(ctx, padL+4, padT-8, '1/w 剖面 与 其最小二乘直线 → 残差 '+sci(linResidual(invs)), '#5fd0a8');
+        tag(ctx, padL+pw+4, padT-8, 'w 剖面', '#ff6b8a');
+        tag(ctx, padL+pw+4, padT+6, '残差 '+sci(linResidual(ws)), '#ff6b8a');
+        tag(ctx, 6, f.h-4, '屏幕纵向 →', '#6f7d92');
+      }
+    }
+  }
+  function set(id,v){ var e=$(id); if(e) e.textContent = v; }
+  if(cbA) cbA.addEventListener('change', function(){ anim = this.checked; });
+  if(rt) rt.addEventListener('input', update);
+  if(rp) rp.addEventListener('input', update);
+  function tick(now){
+    if(t0 === null){ t0 = now; last = now; }
+    var dt = Math.min(0.05, (now-last)/1000); last = now;
+    if(anim){ travel += dt*0.36; if(travel > 1.4) travel = 0; update(); }
+    requestAnimationFrame(tick);
+  }
+  update();
+  requestAnimationFrame(tick);
+  return { update:update, wProfile:wProfile, linResidual:linResidual, build:build,
+           W:W, H:Hh, TEX:function(){return TEXN;} };
+})();
+
+/* ==================================================================
+   §8 背面剔除
+   ------------------------------------------------------------------
+   符号约定的推导（写在这里以免以后改错）：
+     网格按「从外面看逆时针」组织，于是外法线 = cross(v1−v0, v2−v0)。
+     本页投影把观察空间 y 翻成屏幕 y 朝下，所以一个正面三角形
+     在屏幕空间的有符号面积是**负**的：
+       area2 = E(v0,v1,v2) = (v1−v0) × (v2−v0)
+     因此 frontFace=CCW 时「正面 ⇔ area2 < 0」。
+     闭凸体上，两种约定必然把 12 个三角形分成互补的两组 —— 这是可断言的。
+   ================================================================== */
+var cullSec = (function(){
+  var cv = $('cv-cull');
+  if(!cv) return null;
+  var sel = $('sel-cull'), sw = $('sel-wind'), cbBad = $('cb-wind-bad'), cbSpin = $('cb-spin');
+  var W = 160, Hh = 110;
+  var CUBE = [[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]];
+  /* 六个面，均按「从外面看逆时针」组织 */
+  var FACES = [[4,5,6,7],[0,3,2,1],[0,4,7,3],[1,2,6,5],[3,7,6,2],[0,1,5,4]];
+  var TRI = [];
+  (function(){
+    for(var f=0; f<FACES.length; f++){
+      var q = FACES[f];
+      TRI.push([q[0],q[1],q[2]]);
+      TRI.push([q[0],q[2],q[3]]);
+    }
+  })();
+  var ang = 0.6, ang2 = 0.25, spin = true, last = null, t0 = null;
+  var mode = 'screen', wind = 'ccw', badTop = false;
+
+  function build(){
+    var view = makeView(v3(0,0,4.6), 0, 0);
+    var pr = makeProj(W, Hh, 55, 0.5, 60);
+    var ca = Math.cos(ang), sa = Math.sin(ang);
+    var cb = Math.cos(ang2), sb = Math.sin(ang2);
+    /* 顶面两个三角形绕序写反 —— 只在开剔除时才会暴露 */
+    var flip = { 8:1, 9:1 };
+    var out = [], i;
+    for(i=0;i<TRI.length;i++){
+      var t = TRI[i], idx = [];
+      for(var k=0;k<3;k++){
+        var p = CUBE[t[k]];
+        /* 先绕 Y，再绕 X */
+        var x1 =  p[0]*ca + p[2]*sa, z1 = -p[0]*sa + p[2]*ca, y1 = p[1];
+        var y2 =  y1*cb - z1*sb, z2 = y1*sb + z1*cb;
+        var v = { x:x1, y:y2, z:z2 };
+        var s = pr(view(v3(v.x, v.y, v.z)));
+        idx.push({ x:s.x, y:s.y, w:s.w, z:s.z, u:0,
+                   nx:v.x, ny:v.y, nz:v.z, r:0.32, g:0.44, b:0.70,
+                   ox:p[0], oy:p[1], oz:p[2] });
+      }
+      if(badTop && flip[i]) idx = [idx[0], idx[2], idx[1]];
+      out.push({ v:idx, i:i, verts:t });
+    }
+    return { tris:out, view:view, pr:pr };
+  }
+  function isFront(v, mode, wind){
+    var a2 = area2(v[0], v[1], v[2]);
+    if(mode === 'screen'){
+      return (wind === 'ccw') ? (a2 < 0) : (a2 > 0);
+    }
+    if(mode === 'object'){
+      /* 物体空间的固定判据：完全不响应模型旋转 —— 这是它错的原因 */
+      var a = v[0], b = v[1], c = v[2];
+      var o = cross3(sub3({x:b.ox,y:b.oy,z:b.oz},{x:a.ox,y:a.oy,z:a.oz}),
+                     sub3({x:c.ox,y:c.oy,z:c.oz},{x:a.ox,y:a.oy,z:a.oz}));
+      return o.z > 0;
+    }
+    return true;
+  }
+  function draw(){
+    var f = fit(cv), ctx = f.ctx;
+    var B = build();
+    var fb = makeFB(W,Hh);
+    fbClear(fb, 0.047,0.063,0.090);
+    var kept = 0, culled = 0, pos = 0, neg = 0, px = 0;
+    var cullList = [];
+    for(var i=0;i<B.tris.length;i++){
+      var t = B.tris[i];
+      var a2 = area2(t.v[0], t.v[1], t.v[2]);
+      if(a2 < 0) neg++; else if(a2 > 0) pos++;
+      var front = isFront(t.v, mode, wind);
+      if(mode !== 'off' && !front){ culled++; cullList.push(t); continue; }
+      kept++;
+      px += rasterTri(fb, t.v[0], t.v[1], t.v[2], {
+        mode:'bbox', rule:'tl', ztest:true,
+        shade:function(px2,py2,P,at){
+          return blinnPhong({x:at.nx,y:at.ny,z:at.nz}, [at.r,at.g,at.b], 0.25, 0.22);
+        }
+      });
+    }
+    blitFB(fb, ctx, f.w, f.h);
+    var sx = f.w/W, sy = f.h/Hh;
+    /* 被剔除的三角形：只画轮廓 */
+    for(var c=0;c<cullList.length;c++){
+      var q = cullList[c].v;
+      ctx.strokeStyle = 'rgba(220,60,90,0.85)'; ctx.lineWidth = 1.2;
+      ctx.setLineDash([4,3]);
+      ctx.beginPath();
+      ctx.moveTo(q[0].x*sx, q[0].y*sy);
+      ctx.lineTo(q[1].x*sx, q[1].y*sy);
+      ctx.lineTo(q[2].x*sx, q[2].y*sy);
+      ctx.closePath(); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    var nm = mode==='off' ? '不剔除' : (mode==='object' ? '物体空间绕序（错：不响应旋转）' : '屏幕空间有符号面积');
+    tag(ctx, 10, 18, nm + ' · frontFace=' + wind.toUpperCase(), mode==='screen' ? '#5fd0a8' : '#ff8fa3');
+    tag(ctx, f.w-10, 18, '保留 ' + kept + ' / 12' + (badTop ? ' · 顶面绕序已写反' : ''), '#9fb0c8', 'right');
+    set('cu-total', 12); set('cu-kept', kept); set('cu-culled', culled);
+    set('cu-px', px); set('cu-pos', pos); set('cu-neg', neg);
+  }
+  function set(id,v){ var e=$(id); if(e) e.textContent = v; }
+  if(sel) sel.addEventListener('change', function(){ mode = this.value; draw(); });
+  if(sw) sw.addEventListener('change', function(){ wind = this.value; draw(); });
+  if(cbBad) cbBad.addEventListener('change', function(){ badTop = this.checked; draw(); });
+  if(cbSpin) cbSpin.addEventListener('change', function(){ spin = this.checked; });
+  function tick(now){
+    if(t0===null){ t0 = now; last = now; }
+    var dt = Math.min(0.05,(now-last)/1000); last = now;
+    if(spin){ ang += dt*0.62; ang2 += dt*0.21; if(ang > 6.2832) ang -= 6.2832; draw(); }
+    requestAnimationFrame(tick);
+  }
+  draw(); requestAnimationFrame(tick);
+  return { draw:draw, build:build, isFront:isFront,
+           countFront:function(m,w){
+             var B = build(), n = 0;
+             for(var i=0;i<B.tris.length;i++) if(isFront(B.tris[i].v, m, w)) n++;
+             return n;
+           },
+           setState:function(o){
+             if(o.mode!==undefined) mode=o.mode;
+             if(o.wind!==undefined) wind=o.wind;
+             if(o.spin!==undefined) spin=o.spin;
+             if(o.badTop!==undefined) badTop=o.badTop;
+             draw();
+           },
+           get:function(){ return {mode:mode, wind:wind, badTop:badTop}; },
+           W:W, H:Hh, N:12 };
+})();
+
+/* ==================================================================
+   §9 着色频率
+   ------------------------------------------------------------------
+   两条可断言的成本事实：
+     · Gouraud 的片元着色调用恒为 0（片元阶段只做插值）
+     · Phong 的片元着色调用等于被覆盖像素数
+   一条可断言的正确性事实：
+     · 插值后的法线长度严格小于 1（除非恰好在顶点上）
+   ================================================================== */
+var shadeSec = (function(){
+  var cv = $('cv-shade');
+  if(!cv) return null;
+  var sel = $('sel-shade'), cbW = $('cb-shade-wrong'), cbS = $('cb-shade-spin'), rs = $('r-shade-seg');
+  var W = 160, Hh = 110;
+  var mode = 'phong', noNorm = false, spin = true, seg = 9;
+  var lAng = 0.7, t0 = null, last = null;
+  var stat = null;
+
+  function mesh(){
+    var R = 1.0, out = [], i, j;
+    var NSEG = seg, NSEG2 = seg*2;
+    function P(i,j){
+      var th = Math.PI*(i/NSEG), ph = 2*Math.PI*(j/NSEG2);
+      return { x:R*Math.sin(th)*Math.cos(ph), y:R*Math.cos(th), z:R*Math.sin(th)*Math.sin(ph) };
+    }
+    for(i=0;i<NSEG;i++){
+      for(j=0;j<NSEG2;j++){
+        var a = P(i,j), b = P(i,j+1), c = P(i+1,j+1), d = P(i+1,j);
+        /* 外法线 = 位置归一化；绕序按「从外面看逆时针」 */
+        out.push([a,b,c]); out.push([a,c,d]);
+      }
+    }
+    return out;
+  }
+  /* 不归一化法线的 Blinn-Phong —— §9 的「常见错误」就是用这个 */
+  function shadeRaw(n, base, spec){
+    var diff = Math.max(0, dot3(n, LIGHT));
+    var Hh2 = nrm3(add3(LIGHT, v3(0,0,1)));
+    var sp = Math.pow(Math.max(0, dot3(n, Hh2)), 42);
+    return [ base[0]*(0.18 + 0.82*diff) + spec*sp,
+             base[1]*(0.18 + 0.82*diff) + spec*sp*0.97,
+             base[2]*(0.18 + 0.82*diff) + spec*sp*0.92 ];
+  }
+  function draw(){
+    var f = fit(cv), ctx = f.ctx;
+    var view = makeView(v3(0,0,3.4), 0, 0);
+    var pr = makeProj(W, Hh, 52, 0.5, 40);
+    var base = [0.42,0.46,0.54], spec = 0.9;
+    var meshT = mesh();
+    var tri = [], i, k;
+    for(i=0;i<meshT.length;i++){
+      var vs = [];
+      for(k=0;k<3;k++){
+        var p = meshT[i][k];
+        var s = pr(view(v3(p.x, p.y, p.z)));
+        var nrm = nrm3(p);
+        var vc;
+        if(mode === 'flat'){
+          vc = base;
+        } else if(mode === 'gouraud'){
+          vc = blinnPhong(nrm, base, spec);
+        } else {
+          vc = base;
+        }
+        vs.push({ x:s.x, y:s.y, w:s.w, z:s.z, u:0,
+                  nx:nrm.x, ny:nrm.y, nz:nrm.z,
+                  r:vc[0], g:vc[1], b:vc[2] });
+      }
+      /* flat：把面法线算出来写进三个顶点 —— 片元阶段就只做插值了。
+         面法线必须由**世界空间**的三个顶点算：曾经这里用的是 vs[]，
+         而 vs[].x/y 是屏幕坐标、vs[].z 是 z01（深度缓冲里的值）——
+         拿这三个数当空间坐标做叉积，得到的「法线」与几何毫无关系，
+         flat 模式下的明暗分布是随机的，只是「每个面颜色均匀」这一点还在，
+         所以肉眼很难看出错。 */
+      if(mode === 'flat'){
+        var wa = meshT[i][0], wb = meshT[i][1], wc = meshT[i][2];
+        var fn = nrm3(cross3(sub3(wb, wa), sub3(wc, wa)));
+        /* 绕序决定面法线的朝向，不一定朝外；对着顶点法线翻一下，
+           否则整颗球会被照成背面（全黑）。 */
+        if(dot3(fn, nrm3(wa)) < 0) fn = v3(-fn.x, -fn.y, -fn.z);
+        for(k=0;k<3;k++){ vs[k].nx = fn.x; vs[k].ny = fn.y; vs[k].nz = fn.z; }
+      }
+      tri.push(vs);
+    }
+    var fb = makeFB(W,Hh);
+    fbClear(fb, 0.047,0.063,0.090);
+    var nMin = Infinity, nMax = -Infinity, peak = 0, hl = 0, fsCalls = 0, px = 0;
+    var sh;
+    if(mode === 'gouraud'){
+      /* 片元阶段只插值顶点颜色：着色调用数 0 */
+      sh = function(px2,py2,P,at){ return [at.r, at.g, at.b]; };
+    } else {
+      sh = function(px2,py2,P,at){
+        fsCalls++;
+        if(at.nlen < nMin) nMin = at.nlen;
+        if(at.nlen > nMax) nMax = at.nlen;
+        var n = noNorm ? {x:at.nx,y:at.ny,z:at.nz} : nrm3({x:at.nx,y:at.ny,z:at.nz});
+        var c = noNorm ? shadeRaw(n, [at.r,at.g,at.b], spec) : blinnPhong(n, [at.r,at.g,at.b], spec);
+        var sThis = Math.max(0, c[0]-(at.r*(0.18+0.82)), c[1]-(at.g*(0.18+0.82)));
+        if(sThis > peak) peak = sThis;
+        if(sThis > 0.42) hl++;
+        return c;
+      };
+    }
+    for(i=0;i<tri.length;i++)
+      px += rasterTri(fb, tri[i][0], tri[i][1], tri[i][2], {
+        mode:'bbox', rule:'tl', ztest:true, persp:true, shade:sh
+      });
+    blitFB(fb, ctx, f.w, f.h);
+    stat = { vs:meshT.length*3, fs:fsCalls, px:px,
+             nMin:(nMin===Infinity?1:nMin), nMax:(nMax===-Infinity?1:nMax),
+             peak:peak, hl:hl };
+    var nm = mode==='flat'?'Flat（面法线）':(mode==='gouraud'?'Gouraud（插值颜色）':'Phong（插值法线）');
+    tag(ctx, 10, 18, nm + (mode!=='gouraud' && noNorm ? ' · 法线未归一化 ❌' : ''), '#9fb0c8');
+    tag(ctx, f.w-10, 18, '面数 ' + (seg*seg*4) + ' · 顶点 ' + stat.vs, '#6f7d92', 'right');
+    set('sh-vs', stat.vs);
+    set('sh-fs', stat.fs);
+    set('sh-n', (mode==='gouraud') ? '—（未插值法线）' : fmt(stat.nMin,3)+' … '+fmt(stat.nMax,3));
+    set('sh-peak', fmt(stat.peak,3));
+    set('sh-hlpx', stat.hl);
+  }
+  function set(id,v){ var e=$(id); if(e) e.textContent = v; }
+  if(sel) sel.addEventListener('change', function(){ mode = this.value; draw(); });
+  if(cbW) cbW.addEventListener('change', function(){ noNorm = this.checked; draw(); });
+  if(cbS) cbS.addEventListener('change', function(){ spin = this.checked; });
+  if(rs) rs.addEventListener('input', function(){
+    seg = +this.value; set('v-shade-seg', seg); draw();
+  });
+  function tick(now){
+    if(t0===null){ t0 = now; last = now; }
+    var dt = Math.min(0.05,(now-last)/1000); last = now;
+    if(spin){ lAng += dt*0.5; if(lAng > 6.2832) lAng -= 6.2832; draw(); }
+    requestAnimationFrame(tick);
+  }
+  draw(); requestAnimationFrame(tick);
+  return { draw:draw, stat:function(){ return stat; },
+           setState:function(o){ if(o.mode!==undefined) mode=o.mode; if(o.noNorm!==undefined) noNorm=o.noNorm; if(o.spin!==undefined) spin=o.spin; draw(); },
+           W:W, H:Hh };
+})();
+
+/* ==================================================================
+   MSAA 内核
+   ------------------------------------------------------------------
+   采样图案是**自定**的 2×2 与 4×4 棋盘子集，不代表任何具体硬件的
+   MSAA 图案 —— 图案本身是个独立话题，这里只要「每个像素 N 个点」成立。
+   关键区别（本节的读数就是为它设的）：
+     MSAA：覆盖与深度按样本存，**着色每像素每三角形一次**
+     SSAA：每个样本都着色一次，成本随 N 线性增长
+   ================================================================== */
+var MSAA_POS = {
+  1: [[0.5,0.5]],
+  4: [[0.25,0.25],[0.75,0.25],[0.25,0.75],[0.75,0.75]],
+  8: [[0.125,0.125],[0.625,0.125],[0.375,0.375],[0.875,0.375],
+      [0.125,0.625],[0.625,0.625],[0.375,0.875],[0.875,0.875]]
+};
+/* N 归一化。MSAA_POS 是固定表，页面只允许表内的 N。
+   所有「按 N 查表」的地方都必须先过这里 —— §10 的放大窗直接用 MSAA_POS[N][s]，
+   一旦 N 落在表外就会读到 undefined。归一化只做一次、只写一处，才不会漏。 */
+function normMSAA(n){ return MSAA_POS[n] ? n : 4; }
+function rasterMSAA(fb, tris, N0, o){
+  o = o || {};
+  var W = fb.W, H = fb.H, NP = W*H;
+  /* 归一化必须连 N 本身一起改：
+     曾经写成 var SP = MSAA_POS[N] || MSAA_POS[1]，但后面分配 zS/cS
+     与两层采样循环仍按原来的 N 走 —— 传进一个表外的 N 就会读到
+     SP[j] === undefined 然后抛 "Cannot read properties of undefined (reading '0')"，
+     整个模块连画都画不出来。 */
+  var N = normMSAA(N0);
+  var SP = MSAA_POS[N];
+  var zS = new Float32Array(NP*N);
+  var i, j, k;
+  for(i=0;i<NP*N;i++) zS[i] = 1;
+  var cS = new Float32Array(NP*N*3);
+  var bg = o.bg || [0.047,0.063,0.090];
+  for(i=0;i<NP*N;i++){ cS[i*3]=bg[0]; cS[i*3+1]=bg[1]; cS[i*3+2]=bg[2]; }
+  var covS = new Uint8Array(NP);
+  /* 逐样本覆盖掩码：§10 的放大窗要能指出「这个像素的 8 个样本里被盖住的是哪几个」，
+     而 covS 只记每像素的计数，分辨不出「盖了哪几个」。空心圈 = 没被盖住。 */
+  var covSmp = new Uint8Array(NP*N);
+  var shadeCount = 0, ssaaCount = 0, tested = 0, coveredSamples = 0;
+
+  for(var ti=0; ti<tris.length; ti++){
+    var v0=tris[ti][0], v1=tris[ti][1], v2=tris[ti][2];
+    var sgn = windingSign(v0,v1,v2);
+    var x0 = Math.max(0, Math.floor(Math.min(v0.x,v1.x,v2.x)));
+    var x1 = Math.min(W-1, Math.ceil (Math.max(v0.x,v1.x,v2.x)));
+    var y0 = Math.max(0, Math.floor(Math.min(v0.y,v1.y,v2.y)));
+    var y1 = Math.min(H-1, Math.ceil (Math.max(v0.y,v1.y,v2.y)));
+    for(var y=y0; y<=y1; y++){
+      for(var x=x0; x<=x1; x++){
+        var idx = y*W+x, owned = [];
+        for(j=0;j<N;j++){
+          tested++;
+          var sx = x + SP[j][0], sy = y + SP[j][1];
+          var a = sgn*Efun(v0.x,v0.y,v1.x,v1.y,sx,sy);
+          var b = sgn*Efun(v1.x,v1.y,v2.x,v2.y,sx,sy);
+          var c = sgn*Efun(v2.x,v2.y,v0.x,v0.y,sx,sy);
+          if(a<0||b<0||c<0) continue;
+          if(a===0 && !edgeIsTopLeft(sgn,v0,v1)) continue;
+          if(b===0 && !edgeIsTopLeft(sgn,v1,v2)) continue;
+          if(c===0 && !edgeIsTopLeft(sgn,v2,v0)) continue;
+          var l = baryScreen(v0,v1,v2, sx, sy);
+          var z = l.l0*v0.z + l.l1*v1.z + l.l2*v2.z;
+          if(o.ztest !== false && !(z < zS[idx*N+j])) continue;
+          zS[idx*N+j] = z;
+          owned.push({ s:j, l:l });
+        }
+        if(!owned.length) continue;
+        coveredSamples += owned.length;
+        for(k=0;k<owned.length;k++) covSmp[idx*N + owned[k].s] = 1;
+        if(o.perSampleShade){
+          /* 退化成 SSAA：每个子采样各自着色 */
+          for(k=0;k<owned.length;k++){
+            var lk = owned[k].l;
+            var Pk = perspWeights(lk, v0.w, v1.w, v2.w);
+            var ck = o.shade(x + SP[owned[k].s][0], y + SP[owned[k].s][1],
+                             Pk, attrAt(v0,v1,v2,Pk), lk);
+            var sk = idx*N + owned[k].s;
+            cS[sk*3]=ck[0]; cS[sk*3+1]=ck[1]; cS[sk*3+2]=ck[2];
+            ssaaCount++;
+          }
+        } else {
+          /* MSAA：每像素每三角形只着色一次。
+             位置取被覆盖样本的质心 —— 硬件的 centroid 采样干的就是这件事：
+             像素中心可能落在三角形外，直接在那儿取属性等于外推。 */
+          var cx=0, cy=0;
+          for(k=0;k<owned.length;k++){ cx += x + SP[owned[k].s][0]; cy += y + SP[owned[k].s][1]; }
+          cx /= owned.length; cy /= owned.length;
+          var lc = baryScreen(v0,v1,v2, cx, cy);
+          var Pc = perspWeights(lc, v0.w, v1.w, v2.w);
+          var cc = o.shade(cx, cy, Pc, attrAt(v0,v1,v2,Pc), lc);
+          for(k=0;k<owned.length;k++){
+            var s2 = idx*N + owned[k].s;
+            cS[s2*3]=cc[0]; cS[s2*3+1]=cc[1]; cS[s2*3+2]=cc[2];
+          }
+          shadeCount++;
+        }
+        covS[idx] += owned.length;
+      }
+    }
+  }
+  /* resolve：把每个像素的 N 个样本平均 */
+  var hist = {}, partial = 0;
+  for(i=0;i<NP;i++){
+    var c0=0, c1=0, c2=0;
+    for(j=0;j<N;j++){ var q=(i*N+j)*3; c0+=cS[q]; c1+=cS[q+1]; c2+=cS[q+2]; }
+    fb.col[i*3]=c0/N; fb.col[i*3+1]=c1/N; fb.col[i*3+2]=c2/N;
+    if(covS[i] > 0 && covS[i] < N){ partial++; hist[covS[i]] = (hist[covS[i]]||0)+1; }
+  }
+  var hMax = 0, hVal = 0;
+  for(var kk in hist) if(hist[kk] > hMax){ hMax = hist[kk]; hVal = +kk; }
+  return { shadeCount:shadeCount, ssaaCount:ssaaCount, tested:tested,
+           coveredSamples:coveredSamples, partial:partial, modeCov:hVal,
+           covS:covS, covSample:covSmp, cS:cS, N:N };
+}
+
+/* ==================================================================
+   §10 MSAA
+   ================================================================== */
+var msaaSec = (function(){
+  var cv = $('cv-msaa'), cz = $('cv-msaa-zoom');
+  if(!cv) return null;
+  var sel = $('sel-msaa'), cbS = $('cb-msaa-ssaa'), cbE = $('cb-msaa-edge');
+  var W = 160, Hh = 110;
+  var N = 4, ssaaLike = false;
+  var stat = null;
+  function grad(p, a){
+    return [ 0.16 + 0.68*(p.x/W), 0.24 + 0.52*(1 - p.y/Hh), 0.52 + 0.40*a ];
+  }
+  function star(){
+    var cx = W*0.5, cy = Hh*0.5, R = Math.min(W,Hh)*0.46, r = R*0.44;
+    var pts = [], n = 7, i;
+    for(i=0;i<n*2;i++){
+      var a = -Math.PI/2 + i*Math.PI/n, rad = (i%2===0)?R:r;
+      pts.push({ x:cx + rad*Math.cos(a), y:cy + rad*Math.sin(a) });
+    }
+    var tris = [];
+    for(i=0;i<n*2;i++){
+      var A = pts[i], B = pts[(i+1)%(n*2)], C = { x:cx, y:cy };
+      var cA = grad(A,0), cB = grad(B,0.5), cC = grad(C,1);
+      tris.push([
+        { x:A.x,y:A.y,z:0.5,w:1,u:0,nx:0,ny:0,nz:1,r:cA[0],g:cA[1],b:cA[2] },
+        { x:B.x,y:B.y,z:0.5,w:1,u:0,nx:0,ny:0,nz:1,r:cB[0],g:cB[1],b:cB[2] },
+        { x:C.x,y:C.y,z:0.5,w:1,u:0,nx:0,ny:0,nz:1,r:cC[0],g:cC[1],b:cC[2] }
+      ]);
+    }
+    return tris;
+  }
+  function draw(){
+    N = normMSAA(sel ? +sel.value : 4);
+    var f = fit(cv), ctx = f.ctx;
+    var fb = makeFB(W,Hh);
+    fbClear(fb, 0.047,0.063,0.090);
+    var tris = star();
+    stat = rasterMSAA(fb, tris, N, {
+      ztest:false, perSampleShade:ssaaLike,
+      /* 顶点色即颜色：这样 SSAA 与 MSAA 在边缘上的差别才看得见 */
+      shade:function(px,py,P,at){ return [at.r, at.g, at.b]; }
+    });
+    blitFB(fb, ctx, f.w, f.h);
+    var sx = f.w/W, sy = f.h/Hh;
+    if(cbE && cbE.checked){
+      ctx.strokeStyle = 'rgba(255,255,255,0.28)'; ctx.lineWidth = 1;
+      for(var t=0;t<tris.length;t++){
+        ctx.beginPath();
+        ctx.moveTo(tris[t][0].x*sx, tris[t][0].y*sy);
+        ctx.lineTo(tris[t][1].x*sx, tris[t][1].y*sy);
+        ctx.lineTo(tris[t][2].x*sx, tris[t][2].y*sy);
+        ctx.closePath(); ctx.stroke();
+      }
+    }
+    tag(ctx, 10, 18, N + '× ' + (ssaaLike?'每样本着色（退化为 SSAA）':'MSAA')
+        + ' · 部分覆盖像素 ' + stat.partial, ssaaLike?'#ff8fa3':'#5fd0a8');
+
+    /* 放大窗：找覆盖率最接近 N/2 的像素，那一定是边缘 */
+    if(cz){
+      var fz = fit(cz), zc = fz.ctx;
+      zc.fillStyle = VP_BG; zc.fillRect(0,0,fz.w,fz.h);
+      var best = -1, bestScore = 1e9;
+      for(var i=0;i<W*Hh;i++){
+        var cov = stat.covS[i];
+        if(cov <= 0 || cov >= N) continue;
+        var sc2 = Math.abs(cov - N/2);
+        if(sc2 < bestScore){ bestScore = sc2; best = i; }
+      }
+      if(best < 0){ tag(zc, 10, 20, '当前没有部分覆盖的像素（1× 无抗锯齿）', '#9fb0c8'); }
+      else {
+        var bx = best % W, by = Math.floor(best / W);
+        var G = 9, cell = Math.min((fz.w-20)/G, (fz.h-40)/G);
+        var ox = (fz.w - G*cell)/2, oy = 34;
+        for(var yy=0; yy<G; yy++) for(var xx=0; xx<G; xx++){
+          var px2 = bx - 4 + xx, py2 = by - 4 + yy;
+          var cx2 = ox + xx*cell, cy2 = oy + yy*cell;
+          var inside = (px2>=0 && px2<W && py2>=0 && py2<Hh);
+          zc.fillStyle = '#141a24';
+          zc.fillRect(cx2, cy2, cell-1, cell-1);
+          if(!inside) continue;
+          var cidx = py2*W + px2;
+          for(var s=0;s<N;s++){
+            var q = (cidx*N+s)*3;
+            /* 逐样本判定：空心圈 = 该样本落在三角形外（或没通过深度测试）。
+               放大窗的全部意义就在这里 —— 「MSAA 只是把覆盖率细分到样本上，
+               颜色并没有多算」，实心与空心的分布正好把这句话画出来。 */
+            var cov1 = stat.covSample[cidx*N+s] > 0;
+            var dotR = Math.max(1.2, cell*0.11);
+            zc.beginPath();
+            zc.arc(cx2 + MSAA_POS[N][s][0]*cell, cy2 + MSAA_POS[N][s][1]*cell, dotR, 0, 6.284);
+            if(cov1){
+              zc.fillStyle = 'rgb(' + encode(stat.cS[q]) + ','
+                           + encode(stat.cS[q+1]) + ',' + encode(stat.cS[q+2]) + ')';
+              zc.fill();
+            } else {
+              zc.strokeStyle = 'rgba(159,176,200,0.55)'; zc.lineWidth = 1;
+              zc.stroke();
+            }
+          }
+          zc.strokeStyle = 'rgba(255,255,255,0.16)'; zc.lineWidth = 1;
+          zc.strokeRect(cx2, cy2, cell-1, cell-1);
+        }
+        tag(zc, 10, 18, '像素 (' + bx + ',' + by + ') 周围 9×9 · 覆盖 ' + stat.covS[best] + '/' + N, '#c8d2e4');
+        tag(zc, 10, oy + G*cell + 16, '小圆点 = 子采样位置；点内有颜色 = 该样本被覆盖', '#6f7d92');
+      }
+    }
+    set('ms-n', N);
+    set('ms-shade', stat.shadeCount);
+    set('ms-ssaa', stat.coveredSamples);
+    var covAvg = 0, cnt2 = 0;
+    for(var q2=0;q2<W*Hh;q2++) if(stat.covS[q2]>0){ covAvg += stat.covS[q2]/N; cnt2++; }
+    set('ms-cov', cnt2 ? fmt(100*covAvg/cnt2,1)+'%' : '—');
+    set('ms-part', stat.partial);
+    set('ms-step', stat.modeCov ? (stat.modeCov + '/' + N) : '—');
+  }
+  function set(id,v){ var e=$(id); if(e) e.textContent = v; }
+  if(sel) sel.addEventListener('change', draw);
+  if(cbS) cbS.addEventListener('change', function(){ ssaaLike = this.checked; draw(); });
+  if(cbE) cbE.addEventListener('change', draw);
+  draw();
+  return { draw:draw, stat:function(){ return stat; }, W:W, H:Hh,
+           /* 这一节的 N / ssaaLike 是「控件即状态」：draw() 每次都从 <select> 读。
+              所以 setState 必须把值写回控件 —— 只改模块变量的话，紧接着的
+              draw() 会立刻用控件的旧值把它覆盖掉。⑫b「覆盖样本数随 N 增长」
+              曾经就是这样假失败的：N=4 与 N=8 两次快照其实是同一份 N=4。 */
+           setState:function(o){
+             if(o.N !== undefined){ N = o.N; if(sel) sel.value = String(o.N); }
+             if(o.ssaaLike !== undefined){ ssaaLike = o.ssaaLike; if(cbS) cbS.checked = !!o.ssaaLike; }
+             draw();
+           },
+           star:star };
+})();
+
+/* ==================================================================
+   §11 合流：G-Buffer 是两条路的接口
+   ================================================================== */
+var mergeSec = (function(){
+  var cv = $('cv-merge');
+  if(!cv) return null;
+  function draw(){
+    var f = fit(cv), ctx = f.ctx;
+    ctx.fillStyle = VP_BG; ctx.fillRect(0,0,f.w,f.h);
+    var pad = 22, bw = (f.w - pad*2 - 34) / 2;
+    var y0 = 34, bh = f.h - y0 - 54;
+    function box(x,y,w,h,title,sub,col,fill){
+      ctx.fillStyle = fill || 'rgba(255,255,255,0.04)';
+      ctx.fillRect(x,y,w,h);
+      ctx.strokeStyle = col; ctx.lineWidth = 1.4; ctx.strokeRect(x,y,w,h);
+      tag(ctx, x+9, y+18, title, col);
+      if(sub) tag(ctx, x+9, y+34, sub, '#8fa0b8');
+    }
+    /* 左：光栅化 → G-Buffer */
+    box(pad, y0, bw, bh, '光栅化 pass', '深度 · 法线 · albedo · 粗糙度', '#5fd0a8');
+    var gx = pad+12, gy = y0+46, gw = (bw-36)/2, gh = (bh-70)/2;
+    var GB = [['深度 z01', [0.42,0.44,0.48]], ['法线 N', [0.62,0.42,0.72]],
+              ['albedo', [0.80,0.60,0.30]], ['运动矢量', [0.32,0.52,0.82]]];
+    for(var i=0;i<4;i++){
+      var bx = gx + (i%2)*(gw+12), by = gy + Math.floor(i/2)*(gh+14);
+      ctx.fillStyle = 'rgb(' + encode(GB[i][1][0]) + ',' + encode(GB[i][1][1]) + ',' + encode(GB[i][1][2]) + ')';
+      ctx.fillRect(bx, by, gw, gh);
+      ctx.strokeStyle = '#2a3342'; ctx.lineWidth = 1; ctx.strokeRect(bx, by, gw, gh);
+      tag(ctx, bx+5, by+gh-6, GB[i][0], '#c8d2e4');
+    }
+    /* 箭头 */
+    var ax = pad+bw+6, ax2 = pad+bw+28;
+    ctx.strokeStyle = '#8fa0b8'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(ax, y0+bh/2); ctx.lineTo(ax2, y0+bh/2); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(ax2, y0+bh/2); ctx.lineTo(ax2-7, y0+bh/2-5); ctx.lineTo(ax2-7, y0+bh/2+5);
+    ctx.closePath(); ctx.fillStyle = '#8fa0b8'; ctx.fill();
+    /* 右：光追 + 时域 */
+    box(pad+bw+34, y0, bw, bh*0.56, '光追 pass', '阴影 · 反射 · AO · GI', '#6d8cff');
+    box(pad+bw+34, y0+bh*0.62, bw, bh*0.38, '时域累积 + 合成', '复用上一帧，压低每帧光线数', '#f0b429');
+    tag(ctx, pad, f.h-24, 'G-Buffer 的意义：光栅化把「这个像素的表面信息」留下来，光追拿它当次级光线的起点',
+        '#8fa0b8');
+  }
+  draw();
+  return { draw:draw };
+})();
+
+/* ==================================================================
+   页面自检
+   ------------------------------------------------------------------
+   把这一页声称的每一条不变量都在真实页面里验一遍。
+   配套的 verify.raster.js 会调用它，但即使不看脚本，
+   在控制台执行 __rast.verify() 也能得到同样的结论。
+   ================================================================== */
+function verify(){
+  var out = [];
+  function ok(name, pass, detail){
+    out.push({ name:name, pass:!!pass, detail:(detail===undefined?'':String(detail)) });
+  }
+  var v0 = mkVert(10,10), v1 = mkVert(70,14), v2 = mkVert(34,66);
+  v0.z=0.20; v1.z=0.55; v2.z=0.80;
+  v0.w=1.0; v1.w=4.0; v2.w=2.0;
+  v0.u=1.0; v1.u=0.0; v2.u=0.25;
+  var p = { x:34, y:30 };
+
+  /* 1–3 重心坐标 */
+  var b = baryScreen(v0,v1,v2, p.x, p.y);
+  ok('① 重心坐标的分母 = 三角形两倍面积', Math.abs(b.sum - area2(v0,v1,v2)) < 1e-9,
+     b.sum + ' vs ' + area2(v0,v1,v2));
+  ok('② 归一化后 λ 之和恒为 1', Math.abs(b.l0+b.l1+b.l2 - 1) < 1e-12, b.l0+b.l1+b.l2);
+  var good = b.l0*v0.u + b.l1*v1.u + b.l2*v2.u;
+  var bad  = b.w0*v0.u + b.w1*v1.u + b.w2*v2.u;
+  ok('③ 不归一化 = 正确值 × Σ（本节错误开关的精确形式）',
+     Math.abs(bad - b.sum*good) < 1e-9, bad + ' vs ' + (b.sum*good));
+
+  /* 4 透视校正：λ′ ≠ λ，且属性插值只差在 w 上 */
+  var P = perspWeights(b, v0.w, v1.w, v2.w);
+  var uCorr = P.l0*v0.u + P.l1*v1.u + P.l2*v2.u;
+  var uAff  = b.l0*v0.u + b.l1*v1.u + b.l2*v2.u;
+  ok('④ 透视校正与仿射插值确实不同', Math.abs(uCorr - uAff) > 1e-6,
+     'Δu = ' + Math.abs(uCorr - uAff));
+
+  /* 5 深度是 1/w 的仿射函数（三点共线即仿射） */
+  var ws = [1, 2, 7], i;
+  var zs = ws.map(function(w){ return z01of(w, 0.5, 120); });
+  var t = (zs[1]-zs[0]) / (1/ws[1] - 1/ws[0]);
+  var c = zs[0] - t/ws[0];
+  var maxDev = 0;
+  for(i=0;i<3;i++){
+    var pred = t/ws[i] + c;
+    if(Math.abs(pred - zs[i]) > maxDev) maxDev = Math.abs(pred - zs[i]);
+  }
+  ok('⑤ z01 是 1/w 的仿射函数（⇒ 屏幕空间线性 ⇒ 可直接线性插值）', maxDev < 1e-12, maxDev);
+
+  /* 6 水密性：三种边界规则 */
+  function coverCounts(rule){
+    var fb = makeFB(fillSec.W, fillSec.H);
+    fbClear(fb, 0,0,0);
+    for(var g=0; g<fillSec.GROUPS.length; g++)
+      for(var t2=0; t2<fillSec.GROUPS[g].length; t2++){
+        var q = fillSec.GROUPS[g][t2];
+        var a = mkVert(q[0][0],q[0][1]), bb = mkVert(q[1][0],q[1][1]), cc = mkVert(q[2][0],q[2][1]);
+        rasterTri(fb, a, bb, cc, { mode:'bbox', rule:rule, ztest:false,
+                                   shade:flatShade([1,1,1]) });
+      }
+    var uni = makeFB(fillSec.W, fillSec.H);
+    fbClear(uni, 0,0,0);
+    for(var g2=0; g2<fillSec.GROUPS.length; g2++)
+      for(var t3=0; t3<fillSec.GROUPS[g2].length; t3++){
+        var q2 = fillSec.GROUPS[g2][t3];
+        rasterTri(uni, mkVert(q2[0][0],q2[0][1]), mkVert(q2[1][0],q2[1][1]), mkVert(q2[2][0],q2[2][1]),
+                  { mode:'bbox', rule:'all', ztest:false, shade:flatShade([0,0,0]) });
+      }
+    var zero=0, two=0;
+    for(var k=0;k<fillSec.W*fillSec.H;k++){
+      if(uni.cover[k] === 0) continue;
+      if(fb.cover[k] === 0) zero++;
+      else if(fb.cover[k] >= 2) two++;
+    }
+    return { zero:zero, two:two };
+  }
+  var cTL = coverCounts('tl'), cAll = coverCounts('all'), cNone = coverCounts('none');
+  ok('⑥ top-left 规则下水密（0 缝 / 0 重复）', cTL.zero === 0 && cTL.two === 0,
+     '缝 ' + cTL.zero + ' 重复 ' + cTL.two);
+  ok('⑥b 边界全收 ⇒ 出现重复覆盖（错误可被检出）', cAll.two > 0, '重复 ' + cAll.two);
+  ok('⑥c 边界全弃 ⇒ 出现裂缝（错误可被检出）', cNone.zero > 0, '缝 ' + cNone.zero);
+
+  /* 7 覆盖范围收缩：扫描线与包围盒的覆盖集合必须一致 */
+  function coverSet(mode){
+    var fb = makeFB(160,110), s = new Uint8Array(160*110);
+    fbClear(fb, 0,0,0);
+    var a = mkVert(20,88), bb = mkVert(128,79), cc = mkVert(76,15);
+    rasterTri(fb, a, bb, cc, { mode:mode, rule:'tl', ztest:false, shade:flatShade([1,1,1]) });
+    for(var k=0;k<160*110;k++) s[k] = fb.cover[k] > 0 ? 1 : 0;
+    return s;
+  }
+  var sB = coverSet('bbox'), sS = coverSet('scan'), sF = coverSet('full'), diff = 0, diff2 = 0;
+  for(i=0;i<160*110;i++){ if(sB[i]!==sS[i]) diff++; if(sB[i]!==sF[i]) diff2++; }
+  ok('⑦ 扫描线 / 包围盒 / 全屏 三种策略覆盖集合完全一致', diff === 0 && diff2 === 0,
+     'bbox≠scan ' + diff + ' · bbox≠full ' + diff2);
+
+  /* 8 reverse-Z 只改变精度，不改变结果 */
+  function renderReverse(rev){
+    var sc = depthSec.getScene();
+    var fb = makeFB(64,44), k;
+    fbClear(fb, 0,0,0, rev);
+    for(k=0;k<sc.length;k++)
+      rasterTri(fb, sc[k][0], sc[k][1], sc[k][2],
+                { mode:'bbox', rule:'tl', reverse:rev, ztest:true,
+                  shade:function(px,py,P,at){ return [at.r, at.g, at.b]; } });
+    return { cov:fb.cover.slice(), z:fb.z.slice() };
+  }
+  var rN = renderReverse(false), rR = renderReverse(true);
+  var covDiff = 0;
+  for(i=0;i<64*44;i++) if((rN.cov[i]>0) !== (rR.cov[i]>0)) covDiff++;
+  ok('⑧ reverse-Z 与标准 Z 的覆盖集合完全一致（只改精度不改结果）', covDiff === 0, covDiff);
+
+  /* 9 1/w 在屏幕空间线性，w 不是 */
+  if(perspSec){
+    var rows = perspSec.wProfile(v3(0,1.55,-0.2), -0.28);
+    var inv = rows.map(function(r){ return r.inv; });
+    var wv  = rows.map(function(r){ return r.w; });
+    var eInv = perspSec.linResidual(inv), eW = perspSec.linResidual(wv);
+    ok('⑨ 1/w 沿屏幕纵向的线性残差 ≈ 0', eInv < 1e-9, eInv);
+    ok('⑨b w 沿屏幕纵向远离线性（所以它不能直接插值）', eW > 1e-3, eW);
+  }
+
+  /* 10 背面剔除：两种 frontFace 约定必然互补 */
+  if(cullSec){
+    var kn = cullSec.countFront('screen','ccw');
+    var kc = cullSec.countFront('screen','cw');
+    ok('⑩ CCW 与 CW 两个约定保留下来的三角形互补，合计 = 12',
+       kn + kc === 12 && kn > 0 && kc > 0, kn + ' + ' + kc);
+    ok('⑩b 剔除确实减少了保留数', kn < 12, kn);
+  }
+
+  /* 11 着色频率的成本与正确性 */
+  if(shadeSec){
+    shadeSec.setState({ mode:'gouraud', spin:false });
+    var sG = shadeSec.stat();
+    shadeSec.setState({ mode:'phong', spin:false });
+    var sP = shadeSec.stat();
+    ok('⑪ Gouraud 的片元着色调用恒为 0（片元阶段只插值）', sG.fs === 0, sG.fs);
+    ok('⑪b Phong 的片元着色调用 = 被覆盖像素数', sP.fs === sP.px && sP.px > 0,
+       sP.fs + ' vs ' + sP.px);
+    ok('⑪c 插值后法线长度严格小于 1（所以在片元阶段必须重新归一化）',
+       sP.nMax < 1 + 1e-9 && sP.nMin < 0.999, sP.nMin + ' … ' + sP.nMax);
+  }
+
+  /* 12 MSAA 的成本结构 */
+  if(msaaSec){
+    msaaSec.setState({ N:4, ssaaLike:false });
+    var m1 = msaaSec.stat();
+    msaaSec.setState({ N:8, ssaaLike:false });
+    var m2 = msaaSec.stat();
+    msaaSec.setState({ N:8, ssaaLike:true });
+    var m3 = msaaSec.stat();
+    msaaSec.setState({ N:4, ssaaLike:true });
+    var m4 = msaaSec.stat();
+    var rgMS = m2.shadeCount / m1.shadeCount;
+    var rgCV = m2.coveredSamples / m1.coveredSamples;
+    var rgSS = m3.ssaaCount / m4.ssaaCount;
+    /* MSAA 的成本是「每像素每三角形着色一次」，所以它的着色次数随 N 只微涨 ——
+       涨的那一点来自「N 变大后新出现的部分覆盖像素」（像素中心在三角形外、
+       但某个样本落在里面，于是这个像素第一次需要被着色）。
+       实测 N=4→8：着色 ×1.038，而覆盖样本 ×1.9992。
+       这条断言不能写成「N=4 与 N=8 的着色次数完全相等」——那是错的：
+       3850 → 3995，真实实现就会挂在这条假断言上。 */
+    ok('⑫ MSAA 的着色次数不随采样数线性增长（N=4→8 只涨 <10%）',
+       rgMS > 1 && rgMS < 1.10,
+       m1.shadeCount + ' → ' + m2.shadeCount + '  ×' + fmt(rgMS, 4));
+    ok('⑫b 被覆盖样本数随 N 严格线性增长（N 翻倍 ⇒ 覆盖样本翻倍）',
+       rgCV > 1.7 && rgCV < 2.3,
+       m1.coveredSamples + ' → ' + m2.coveredSamples + '  ×' + fmt(rgCV, 4));
+    ok('⑫c SSAA 的着色次数 = 被覆盖样本数（每个样本各着一次）',
+       m4.ssaaCount === m4.coveredSamples && m3.ssaaCount === m3.coveredSamples,
+       'N=4: ' + m4.ssaaCount + '/' + m4.coveredSamples +
+       '   N=8: ' + m3.ssaaCount + '/' + m3.coveredSamples);
+    ok('⑫d SSAA 的着色次数随 N 线性增长（正是 MSAA 要避免的那件事）',
+       rgSS > 1.7 && rgSS < 2.3 && rgSS > rgMS * 1.5,
+       'SSAA ×' + fmt(rgSS, 4) + ' vs MSAA ×' + fmt(rgMS, 4));
+    ok('⑫e 同一 N=4 下，SSAA 的着色次数显著高于 MSAA',
+       m4.ssaaCount > m1.shadeCount * 2,
+       m4.ssaaCount + ' vs ' + m1.shadeCount);
+    msaaSec.setState({ N:4, ssaaLike:false });
+  }
+
+  /* 13 字体下限（上一页用像素取证测出来的渲染事实） */
+  var big = document.querySelectorAll('canvas');
+  ok('⑬ 画布等宽标注字号不低于 11.5px', FONT.indexOf('11.5px') >= 0, FONT);
+
+  return out;
+}
+
+/* ==================================================================
+   UI 接线
+   ================================================================== */
+(function(){
+  /* 目录高亮 */
+  var links = document.querySelectorAll ? document.querySelectorAll('.toc a') : [];
+  if(links && links.length && typeof window.addEventListener === 'function'){
+    window.addEventListener('scroll', function(){
+      var y = (window.scrollY || 0) + 120, best = null;
+      for(var i=0;i<links.length;i++){
+        var href = links[i].getAttribute ? (links[i].getAttribute('href') || '') : '';
+        if(href.charAt(0) !== '#') continue;
+        var el = document.getElementById(href.slice(1));
+        if(el && el.offsetTop <= y) best = links[i];
+      }
+      for(var j=0;j<links.length;j++) if(links[j].className !== undefined) links[j].className = '';
+      if(best) best.className = 'on';
+    });
+  }
+  /* 陷阱卡片跳转 */
+  var traps = document.querySelectorAll ? document.querySelectorAll('.trap') : [];
+  for(var i=0;i<(traps?traps.length:0);i++){
+    (function(el){
+      el.addEventListener('click', function(){
+        var id = el.getAttribute ? el.getAttribute('data-jump') : null;
+        if(!id) return;
+        var t = document.getElementById(id.slice(1));
+        if(t && t.scrollIntoView) t.scrollIntoView({ behavior:'smooth', block:'start' });
+      });
+    })(traps[i]);
+  }
+})();
+
+/* 供校验脚本使用的出口：纯函数 + 页面自检 */
+window.__rast = {
+  Efun:Efun, area2:area2, baryScreen:baryScreen, perspWeights:perspWeights,
+  windingSign:windingSign, edgeIsTopLeft:edgeIsTopLeft, attrAt:attrAt,
+  makeFB:makeFB, fbClear:fbClear, rasterTri:rasterTri, rasterMSAA:rasterMSAA,
+  makeView:makeView, makeProj:makeProj, z01of:z01of, eps32:eps32,
+  blinnPhong:blinnPhong, MSAA_POS:MSAA_POS, fbToRGBA:fbToRGBA,
+  sections:{ fork:fork, proj:proj, edge:edgeSec, cover:coverSec, fill:fillSec,
+             depth:depthSec, persp:perspSec, cull:cullSec, shade:shadeSec,
+             msaa:msaaSec, merge:mergeSec },
+  verify:verify
+};
+
+
+
+
+
+})();
+
+</script>
+</body>
+</html>
