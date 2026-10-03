@@ -237,6 +237,46 @@ section('5 顺序与单一来源（正则查不出、只能比下标的地方）
   ok('只读控件的那几个模块没有被塞进 setState（避免第二个状态源）',
      offenders.length === 0, offenders.join(',') || '干净');
 }
+{
+  /* 自己驱动动画的模块，必须在**模块顶层**先同步画一帧，再注册 rAF。
+     ------------------------------------------------------------------
+     为什么这条必须有：画布内容若完全由 rAF 回调产生，一旦 rAF 被暂停
+     （预览面板离屏、后台标签页、省电节流），画布上就是一个像素都没有 ——
+     用户看到的就是「两个黑框」。§1 原来是全页唯一一只在回调里画的模块，
+     于是它成了唯一会在暂停时变黑的模块。而这类缺陷**任何**「算出来的
+     帧缓冲长什么样」的断言都抓不到：帧缓冲一直是对的，错的是它没上屏。
+
+     判据：顶层那条注册行的**紧邻上一行**（或同一行的前半句）必须是一次
+     绘制调用，函数名在 PAINTERS 白名单里。白名单是刻意显式的 ——
+     与其猜「哪些调用算绘制」，不如让新增模块时显式登记一次；漏登记会红，
+     不会静默放过。顶层 = 缩进恰好 2 空格（本文件约定：嵌在回调里的是 4+）。 */
+  const PAINTERS = ['draw', 'update', 'paint', 'paintAt', 'render', 'redraw'];
+  const mods = ['fork', 'proj', 'edgeSec', 'coverSec', 'fillSec', 'depthSec',
+                'perspSec', 'cullSec', 'shadeSec', 'msaaSec', 'mergeSec'];
+  const animated = [], noSync = [];
+  mods.forEach(function (name) {
+    const i = bare.indexOf('var ' + name + ' = (function(){');
+    if (i < 0) return;
+    const body = bare.slice(i, bare.indexOf('\n})();', i));
+    const top = body.split('\n').filter(function (l) { return /^  \S/.test(l); })
+                    .map(function (l) { return l.trim(); });
+    const ri = top.findIndex(function (l) { return l.indexOf('requestAnimationFrame(') >= 0; });
+    if (ri < 0) return;                       /* 这个模块不自己驱动动画 */
+    animated.push(name);
+    /* 同行前置（`draw(); requestAnimationFrame(tick);`）优先，否则看上一行 */
+    const line = top[ri], at = line.indexOf('requestAnimationFrame(');
+    const same = line.slice(0, at).replace(/[\s;]+$/, '');
+    let m = /([A-Za-z_$][\w$]*)\s*\([^()]*\)$/.exec(same);
+    if (!m && ri > 0) m = /^([A-Za-z_$][\w$]*)\s*\(/.exec(top[ri - 1]);
+    if (!m || PAINTERS.indexOf(m[1]) < 0) {
+      noSync.push(name + '（注册前一行是 ' +
+        JSON.stringify((ri > 0 ? top[ri - 1] : same).slice(0, 44)) + '）');
+    }
+  });
+  ok('自己驱动动画的 ' + animated.length + ' 个模块都在注册 rAF 之前同步画了一帧（' +
+     animated.join('/') + '）',
+     noSync.length === 0, noSync.length ? noSync.join('，') : '全部满足');
+}
 
 /* ---------- 6. 字体与配色一致性 ---------- */
 section('6 字号与配色');

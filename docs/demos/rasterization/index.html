@@ -1142,14 +1142,24 @@ var fork = (function(){
     for(i=0;i<lim;i++){ var p = list[i]; paint(p, COLS[owner[p]]); }
     return lim;
   }
+  /* 首帧必须**同步**画一次，而且进度必须**非零**。
+     ------------------------------------------------------------------
+     §1 是全页唯一一个画布内容完全由 requestAnimationFrame 驱动的模块：
+     其它模块都在注册 rAF 之前先同步 draw()/update() 一次（见 §7 / §8 / §9），
+     所以哪怕 rAF 一次都不触发，它们也有内容。§1 原来只有
+     `requestAnimationFrame(frame)`，一旦 rAF 被暂停（预览面板离屏、
+     后台标签页、省电节流），两块画布上就什么都没有，看起来就是两个黑框。
+     而即便 rAF 正常，进度也从 0 起步 —— 第一帧照样一个像素都不画。
+
+     起点取 0.5 秒（约 12% 进度）：左边画出第一个三角形的多一半、
+     右边扫过若干行，配上「三角形 1/6」的标注，一眼能看出是「动画进行中」
+     而不是坏掉的空画布。用 T0 = now − startEl*1000 起步，
+     是为了让第一次 rAF 回调接着这里继续，而不是把画面倒退回 0。 */
   var T0 = null, SPEED = 0.55;   /* 每秒推进的「条目」比例 */
-  var phase = 0, cur = 0;
-  function frame(now){
-    if(T0 === null) T0 = now;
-    var el = (now - T0)/1000;
+  var START = 0.5, startEl = START;
+  function paintAt(el){
     var total = Math.max(covered, TRI.length);
     var prog = clamp(el*SPEED*total/2.2, 0, total*1.15);
-    phase = prog;
     fbClear(shown, 0.047,0.063,0.090);
     var triQuota = Math.min(TRI.length, Math.floor(prog/ (total/TRI.length)));
     var acc = 0;
@@ -1172,7 +1182,6 @@ var fork = (function(){
     /* 右图：按像素行推进 */
     var shown2 = makeFB(W,H);
     fbClear(shown2, 0.047,0.063,0.090);
-    var rowQuota = Math.round(prog/1.15*covered/total*1.0);
     var lim2 = Math.min(covered, Math.round(prog*(covered/total)));
     for(var q=0;q<lim2;q++){ var p2 = rowMajor[q]; paint2(shown2, p2, COLS[owner[p2]]); }
     var fB = fit(cvB);
@@ -1181,10 +1190,14 @@ var fork = (function(){
     rect(fB.ctx, 0, scanRow*scy, fB.w, scy, '#f0b429', 1.5, [4,3]);
     tag(fB.ctx, 8, 16, '像素 ' + lim2 + '/' + covered, '#f0b429');
     if($('pf-fork')) $('pf-fork').textContent = '左 ' + Math.round(100*acc/Math.max(1,covered)) + '% · 右 ' + Math.round(100*lim2/Math.max(1,covered)) + '%';
-    requestAnimationFrame(frame);
   }
   function paint2(f, px, col){
     f.col[px*3  ] = col[0]; f.col[px*3+1] = col[1]; f.col[px*3+2] = col[2];
+  }
+  function frame(now){
+    if(T0 === null) T0 = now - startEl*1000;
+    paintAt((now - T0)/1000);
+    requestAnimationFrame(frame);
   }
   /* 读数 */
   var total = W*H;
@@ -1195,9 +1208,12 @@ var fork = (function(){
   if(se[3]) se[3].textContent = covered;
   if(se[4]) se[4].textContent = fmt(total*TRI.length/covered, 1) + '×';
   var bt = $('btn-fork');
-  if(bt) bt.addEventListener('click', function(){ T0 = null; });
+  /* 「重新播放」从头（0）开始，而不是从首帧那个 12% 的起点开始 */
+  if(bt) bt.addEventListener('click', function(){ T0 = null; startEl = 0; });
+  paintAt(START);              /* 同步先画一帧，不依赖 rAF */
   requestAnimationFrame(frame);
-  return { owner:owner, COLS:COLS, W:W, H:H, covered:covered, TRI:TRI };
+  return { owner:owner, COLS:COLS, W:W, H:H, covered:covered, TRI:TRI,
+           paintAt:paintAt, START:START };
 })();
 
 /* ==================================================================

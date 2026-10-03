@@ -14,83 +14,10 @@
 
    运行：node _preview.js
    ================================================================== */
-const fs = require('fs');
-const zlib = require('zlib');
 const path = require('path');
 const { load } = require('./_stub.js');
-
-/* ---------- 最小 PNG 编码器 ---------- */
-const CRC_T = (() => {
-  const t = new Int32Array(256);
-  for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c; }
-  return t;
-})();
-function crc32(buf) { let c = -1; for (let i = 0; i < buf.length; i++) c = CRC_T[(c ^ buf[i]) & 0xFF] ^ (c >>> 8); return (c ^ -1) >>> 0; }
-function chunk(type, data) {
-  const len = Buffer.alloc(4); len.writeUInt32BE(data.length, 0);
-  const td = Buffer.concat([Buffer.from(type, 'ascii'), data]);
-  const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(td), 0);
-  return Buffer.concat([len, td, crc]);
-}
-function writePNG(file, w, h, rgb) {
-  const raw = Buffer.alloc(h * (w * 3 + 1));
-  for (let y = 0; y < h; y++) {
-    raw[y * (w * 3 + 1)] = 0;
-    for (let x = 0; x < w * 3; x++) raw[y * (w * 3 + 1) + 1 + x] = rgb[y * w * 3 + x];
-  }
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4);
-  ihdr[8] = 8; ihdr[9] = 2; ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;
-  fs.writeFileSync(file, Buffer.concat([
-    Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]),
-    chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw, { level: 9 })), chunk('IEND', Buffer.alloc(0)),
-  ]));
-}
-
-/* ---------- 画布：往大图里贴小图（最近邻放大） ---------- */
-function makeCanvas(W, H, bg) {
-  const c = { W, H, px: new Float32Array(W * H * 3) };
-  for (let i = 0; i < W * H; i++) { c.px[i * 3] = bg[0]; c.px[i * 3 + 1] = bg[1]; c.px[i * 3 + 2] = bg[2]; }
-  return c;
-}
-function paste(c, src, sw, sh, dx, dy, scale) {
-  for (let y = 0; y < sh * scale; y++) {
-    const sy = Math.floor(y / scale), ty = dy + y;
-    if (ty < 0 || ty >= c.H) continue;
-    for (let x = 0; x < sw * scale; x++) {
-      const sx = Math.floor(x / scale), tx = dx + x;
-      if (tx < 0 || tx >= c.W) continue;
-      const s = (sy * sw + sx) * 3, d = (ty * c.W + tx) * 3;
-      c.px[d] = src[s]; c.px[d + 1] = src[s + 1]; c.px[d + 2] = src[s + 2];
-    }
-  }
-}
-/* 画一个 1px 边框，方便看清每格边界 */
-function border(c, x, y, w, h, col) {
-  for (let i = 0; i < w; i++) {
-    [[x + i, y], [x + i, y + h - 1]].forEach(function (p) {
-      const d = (p[1] * c.W + p[0]) * 3;
-      c.px[d] = col[0]; c.px[d + 1] = col[1]; c.px[d + 2] = col[2];
-    });
-  }
-  for (let j = 0; j < h; j++) {
-    [[x, y + j], [x + w - 1, y + j]].forEach(function (p) {
-      const d = (p[1] * c.W + p[0]) * 3;
-      c.px[d] = col[0]; c.px[d + 1] = col[1]; c.px[d + 2] = col[2];
-    });
-  }
-}
-/* 线性 → sRGB 编码，与页面 encode() 同一套 */
-const enc = (v) => { const c = Math.max(0, Math.min(1, v)); return Math.round(255 * Math.pow(c, 1 / 2.2)); };
-function fbToRGB(fb) {
-  const n = fb.W * fb.H, out = new Float32Array(n * 3);
-  for (let i = 0; i < n; i++) {
-    out[i * 3] = enc(fb.col[i * 3]) / 255;
-    out[i * 3 + 1] = enc(fb.col[i * 3 + 1]) / 255;
-    out[i * 3 + 2] = enc(fb.col[i * 3 + 2]) / 255;
-  }
-  return out;
-}
+/* PNG 编码与「贴图排版」搬到了 _png.js，与 _probe1.js 共用一份 */
+const { makeCanvas, paste, border, enc, fbToRGB, saveCanvas } = require('./_png.js');
 
 /* ---------- 加载页面 ---------- */
 const S = load({ clientWidth: 720, clientHeight: 420 });
@@ -234,10 +161,9 @@ rowsH.forEach(function (r) {
   cy += r.h * SCALE + GAP * 2;
 });
 
+/* 写出：编码细节都在 _png.js 里，这里只管落盘路径 */
 const out = path.join(__dirname, '_preview_sections.png');
-const rgb = new Uint8Array(canvas.W * canvas.H * 3);
-for (let i = 0; i < canvas.W * canvas.H * 3; i++) rgb[i] = Math.round(canvas.px[i] * 255);
-writePNG(out, canvas.W, canvas.H, rgb);
+saveCanvas(out, canvas);
 
 console.log('已写出 ' + path.basename(out) + '  ' + canvas.W + '×' + canvas.H);
 console.log('');
