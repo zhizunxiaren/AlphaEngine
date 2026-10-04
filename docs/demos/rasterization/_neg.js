@@ -179,15 +179,15 @@ const MUTANTS = [
      M35 是 `_probe1.js` 的**控制组**：无害改动不该让它红，
           否则 M33「被检出」可能只是因为脚本永远退出 1。 */
   { id: 'M32', name: '§1 删掉同步首帧（rAF 暂停时就是两个黑框）',
-    find: '  paintAt(START);              /* 同步先画一帧，不依赖 rAF */\n',
+    find: '  paintAt(START);              /* 同步先画一帧（铺满），不依赖 rAF */\n',
     repl: '',
     script: '_check.js', expect: true,
     note: '模块在注册 rAF 之前必须同步画一帧' },
-  { id: 'M33', name: '§1 首帧进度改成 0（画了，但一个像素都没画上）',
-    find: 'var START = 0.5, startEl = START;',
-    repl: 'var START = 0, startEl = START;',
+  { id: 'M33', name: '§1 同步首帧进度改成 0（画了，但一个像素都没画上）',
+    find: 'var START = FULL_EL;',
+    repl: 'var START = 0;',
     script: '_probe1.js', expect: true,
-    note: '一帧都不驱动时画布必须非空（这就是用户看到的黑框）' },
+    note: '一帧都不驱动时画布必须不是空的' },
   { id: 'M34', name: '§8/§9 启动序列里去掉同步 draw()（只留 rAF 注册）',
     find: 'draw(); requestAnimationFrame(tick);',
     repl: 'requestAnimationFrame(tick);',
@@ -197,6 +197,15 @@ const MUTANTS = [
     find: '   光栅化 · 可视化拆解', repl: '   光栅化 ·  可视化拆解',
     script: '_probe1.js', expect: false,
     note: '用来证明 _probe1.js 的断言不是「永远退出 1」' },
+  /* M36 对应的是**用户实际打回来的那一版**：
+     同步首帧确实画了，但只画了 12%（492/11264 像素），剩下 95% 还是暗底，
+     看上去仍是黑框。这条变异的存在意义是钉住判据本身 ——
+     断言必须要求「看得见」，不能只要求「非零」。 */
+  { id: 'M36', name: '§1 同步首帧只画一小块（非零但看不见，= 被打回的那版）',
+    find: 'var START = FULL_EL;',
+    repl: 'var START = 0.5;',
+    script: '_probe1.js', expect: true,
+    note: '零帧那一帧必须铺到 covered 的 80% 以上，「非零」不算合格' },
 ];
 
 /* ---------- 执行 ----------
