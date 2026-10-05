@@ -206,6 +206,24 @@ const MUTANTS = [
     repl: 'var START = 0.5;',
     script: '_probe1.js', expect: true,
     note: '零帧那一帧必须铺到 covered 的 80% 以上，「非零」不算合格' },
+
+  /* ---- 只在浏览器里发作的那一类：桩太宽容 ⇒ 缺陷隐形 ----
+     M37/M38 是同一条改动、两个判据：
+       · M37 打**动态**判据 —— 桩现在只认 ImageData 实例（同浏览器），
+             普通对象会让 blitFB 抛 TypeError，页面顶层执行失败 → 被抓；
+       · M38 打**静态**反向守卫 —— 不执行页面也能从源码认出这个写法。
+     这条缺陷的真实后果比「§1 变黑」严重得多：blitFB 第一次调用就在 §1 的
+     同步初始化路径上，异常会把整个脚本 IIFE 打断，§2~§11 全部不初始化。 */
+  { id: 'M37', name: 'fillImage 拿普通对象冒充 ImageData（真浏览器抛 TypeError，整页卡在 §1）',
+    find: 'fb.img = newImageData(fb.W, fb.H);',
+    repl: 'fb.img = { width:fb.W, height:fb.H, data:new Uint8ClampedArray(fb.W*fb.H*4) };',
+    script: '_probe1.js', expect: true,
+    note: '桩只认 ImageData 实例（同浏览器语义）；普通对象必须被拒' },
+  { id: 'M38', name: '同上，但由静态反向守卫在源码层面认出',
+    find: 'fb.img = newImageData(fb.W, fb.H);',
+    repl: 'fb.img = { width:fb.W, height:fb.H, data:new Uint8ClampedArray(fb.W*fb.H*4) };',
+    script: '_check.js', expect: true,
+    note: '「不再把普通对象字面量当 ImageData 用」反向守卫' },
 ];
 
 /* ---------- 执行 ----------

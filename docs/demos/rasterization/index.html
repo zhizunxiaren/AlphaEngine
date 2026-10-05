@@ -727,6 +727,36 @@ footer ul{margin:8px 0; padding-left:20px}
 (function(){
 'use strict';
 
+/* ---------------- 出错了不许静默 ----------------
+   本页所有画布都是「先刷一层暗底（VP_BG #0c1017 / VP_BLOCK #060a10），
+   再把帧缓冲盖上去」。这个画法的副作用是：**任何**一处抛异常，画布就停在
+   暗底上，看上去和「这一节本来就是这样」一模一样。用户只能报「这一章是黑的」，
+   真正的原因（哪一行、什么错）一丝线索都不留 —— 这段代码就是让它现形。
+
+   真实案例（2026-10-05）：fillImage 拿 {width,height,data} 普通对象冒充
+   ImageData，真浏览器里 putImageData 抛 TypeError。而 blitFB 的第一次调用
+   正好落在 §1 的**同步初始化路径**上，异常直接把整个脚本 IIFE 打断 ——
+   §2~§11 全部没有初始化，页面表现却只是「§1 的两个动画是黑的」。
+   当时 node 桩对 putImageData 的参数照单全收，所以 23 项自检 + 112 项断言全绿。
+
+   教训：黑画布不是「信号」，是「异常」。所以异常必须自己喊出来。 */
+window.addEventListener('error', function(ev){
+  try{
+    var bar = document.getElementById('errbar');
+    if(!bar){
+      bar = document.createElement('div');
+      bar.id = 'errbar';
+      bar.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:99;' +
+        'max-height:42%;overflow:auto;background:#7a1c2e;color:#fff;' +
+        'font:600 12.5px ui-monospace,Consolas,monospace;padding:9px 14px;white-space:pre-wrap';
+      document.body.appendChild(bar);
+    }
+    bar.textContent += '页面脚本出错' + (ev.lineno ? ('（index.html 第 ' + ev.lineno + ' 行）') : '') +
+      '：' + (ev.message || ev.error) +
+      '\n下面各节的画布会因为初始化中断而停在暗底上 —— 先修这里，别去猜画布。\n';
+  }catch(e){ /* 连报错都失败就没办法了；至少别让它变成新的异常 */ }
+});
+
 /* ---------------- 通用小工具 ---------------- */
 function $(id){ return document.getElementById(id); }
 function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
@@ -755,6 +785,29 @@ function fit(cv){
 var VP_BG = '#0c1017';
 var off = document.createElement('canvas');   // 低分辨率缓冲的暂存画布
 
+/* 造 ImageData 用的独立画布。
+   ------------------------------------------------------------------
+   ⚠ 这里必须用 createImageData 造**真正的 ImageData**，不能拿
+   {width, height, data} 这种普通对象字面量去糊弄 putImageData：
+   浏览器里 putImageData 的第一个参数按 IDL 类型 ImageData 转换，
+   普通对象直接抛 TypeError（"The provided value is not of type 'ImageData'"）。
+   一旦抛了，blitFB 就在 fillRect / drawImage **之前**中断，
+   画布上连底色都没刷，永远停在 CSS 的 var(--vp) 上 —— 用户看到的就是
+   「整章画布全黑」。
+
+   而且这个缺陷的位置很毒：blitFB 的第一次调用在 §1 模块初始化的那条同步
+   路径上，所以抛出去会把整个脚本 IIFE 打断，§2 之后的模块全都不会初始化。
+   表面上像是「§1 的两个动画是黑的」，实际是整页没跑起来。
+
+   为什么整套校验曾经完全看不见：node 桩的 putImageData 是照单全收的 noop，
+   普通对象它也高高兴兴收下，于是帧缓冲算得再对也验不出「上不了屏」。
+   现在桩也改成只认 ImageData 实例（见 _stub.js）。 */
+var idCanvas = null, idCtx = null;
+function newImageData(W, H){
+  if(!idCtx){ idCanvas = document.createElement('canvas'); idCtx = idCanvas.getContext('2d'); }
+  return idCtx.createImageData(W, H);
+}
+
 /* ==================================================================
    低分辨率帧缓冲
    ------------------------------------------------------------------
@@ -780,8 +833,9 @@ function fbClear(fb, r,g,b, reverse){
 function encode(c){ return clamp(Math.round(255*Math.pow(clamp(c,0,1), 1/2.2)), 0, 255); }
 function fillImage(fb){
   var n = fb.W*fb.H;
-  if(!fb.img || fb.imgW !== fb.W){
-    fb.img = { width:fb.W, height:fb.H, data:new Uint8ClampedArray(fb.W*fb.H*4) };
+  /* 尺寸用 height 一起判：只比 W 的话，同宽不同高的帧缓冲会沿用旧缓冲 */
+  if(!fb.img || fb.imgW !== fb.W || fb.img.height !== fb.H){
+    fb.img = newImageData(fb.W, fb.H);   /* 真正的 ImageData，不是对象字面量 */
     fb.imgW = fb.W;
   }
   var d = fb.img.data;

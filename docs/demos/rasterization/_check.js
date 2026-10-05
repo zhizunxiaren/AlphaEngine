@@ -178,9 +178,18 @@ const NEG = [
   [/strokeStyle = '#[0-9a-fA-F]{0,5}[^0-9a-fA-F'"\s]/, '颜色字面量都是合法十六进制'],
   [/var isCov = stat\.covS\[cidx\] > 0;/, '§10 放大窗不再留着算出来却没用的 isCov'],
   [/ctx\.lineTo\(zx \+ \(12-4\+0\.5\)\*cell \+ cell\*9/, '§5 放大窗的对角线不再多画一格伸到窗外'],
+  /* 2026-10-05：fillImage 曾经拿 {width,height,data} 普通对象冒充 ImageData。
+     浏览器里 putImageData 只认 ImageData 实例、普通对象抛 TypeError，
+     而 blitFB 的第一次调用就在 §1 的同步初始化路径上 —— 抛出去会把整个脚本
+     IIFE 打断，表面上却只是「§1 两个动画是黑的」。node 桩当时照单全收，
+     所以 23 项自检 + 112 项断言全绿。 */
+  [/\{\s*width\s*:\s*\w+\.W\s*,\s*height\s*:\s*\w+\.H\s*,\s*data\s*:/,
+   '不再把普通对象字面量当 ImageData 用（putImageData 只认 ImageData 实例）'],
 ];
 /* 注意：这些正则跑在 __bare__（已剥注释）上 */
 NEG.forEach(([re, name]) => ok(name, !re.test(bare)));
+ok('fillImage 走 createImageData 造真 ImageData（不是对象字面量）',
+   /createImageData\s*\(/.test(bare));
 
 /* ---------- 5. 顺序敏感 / 单一来源的结构约束 ---------- */
 section('5 顺序与单一来源（正则查不出、只能比下标的地方）');

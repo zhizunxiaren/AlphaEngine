@@ -9,6 +9,10 @@
 const fs = require('fs');
 const path = require('path').join(__dirname, 'index.html');
 const html = fs.readFileSync(path, 'utf8');
+/* ImageData 的「什么算数」只保留一处定义（在 _stub.js），
+   免得两个桩各自漂移 —— 而这里的桩漂移过一次：它对 putImageData 照单全收，
+   于是「拿普通对象当 ImageData」在真浏览器里炸、在冒烟里全绿。 */
+const { StubImageData } = require('./_stub.js');
 
 const s0 = html.lastIndexOf('<script>'), s1 = html.lastIndexOf('</script>');
 if (s0 < 0 || s1 < 0) { console.log('❌ 找不到 <script> 块'); process.exit(1); }
@@ -39,15 +43,18 @@ function makeCtx(tag) {
     drawImage() { noop('drawImage'); },
     createRadialGradient() { noop('createRadialGradient'); return { addColorStop() {} }; },
     createLinearGradient() { noop('createLinearGradient'); return { addColorStop() {} }; },
-    putImageData() { noop('putImageData'); },
-    getImageData(x, y, w, h) {
-      noop('getImageData');
-      return { width: w, height: h, data: new Uint8ClampedArray(w * h * 4) };
+    /* 只认 ImageData 实例（同 _stub.js 的理由）：浏览器会在这里抛
+       TypeError，冒烟测试必须跟着抛，否则这类只在浏览器发作的缺陷
+       会被「0 运行时异常」放过去。 */
+    putImageData(img) {
+      noop('putImageData');
+      if (!(img instanceof StubImageData)) {
+        throw new TypeError("Failed to execute 'putImageData' on " +
+          "'CanvasRenderingContext2D': The provided value is not of type 'ImageData'.");
+      }
     },
-    createImageData(w, h) {
-      noop('createImageData');
-      return { width: w, height: h, data: new Uint8ClampedArray(w * h * 4) };
-    },
+    getImageData(x, y, w, h) { noop('getImageData'); return new StubImageData(w, h); },
+    createImageData(w, h) { noop('createImageData'); return new StubImageData(w, h); },
   };
 }
 

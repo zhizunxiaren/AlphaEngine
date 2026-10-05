@@ -14,6 +14,20 @@
 const fs = require('fs');
 const path = require('path');
 
+/* 桩里的 ImageData。
+   ------------------------------------------------------------------
+   必须是一个**类**（而不是「长得像它的对象」），因为要区分的正是这两者：
+   浏览器里 putImageData 的第一个参数按 IDL 类型 ImageData 转换，
+   只有真实例能过；{width, height, data} 这种普通对象字面量一律抛 TypeError。
+   本页曾经就这么写过 fillImage，于是真浏览器里 blitFB 在 fillRect/drawImage
+   之前就断了 —— 而桩对参数照单全收，整套校验全绿、画面全黑。 */
+class StubImageData {
+  constructor(w, h) {
+    this.width = w; this.height = h;
+    this.data = new Uint8ClampedArray(w * h * 4);
+  }
+}
+
 function makeCtx(tag, counter, capture) {
   /* 每个上下文各自记一笔操作数。只有全局计数不够用：
      矢量画布（折线图、示意图）根本不上屏，判断「**这一块**画布到底
@@ -63,14 +77,26 @@ function makeCtx(tag, counter, capture) {
     },
     createRadialGradient() { noop('createRadialGradient'); return { addColorStop() {} }; },
     createLinearGradient() { noop('createLinearGradient'); return { addColorStop() {} }; },
-    putImageData(img) { noop('putImageData'); this._lastImg = img; },
+    /* putImageData 只认 ImageData 实例 —— 和浏览器一样。
+       为什么要真的抛：桩若对参数照单全收，「拿普通对象当 ImageData 用」
+       这种**只在浏览器里发作**的缺陷就永远验不出来（§1 因此黑了很久，
+       而 23 项自检 + 112 项断言全绿）。桩的职责是复刻浏览器的脾气，
+       不是当老好人。 */
+    putImageData(img) {
+      noop('putImageData');
+      if (!(img instanceof StubImageData)) {
+        throw new TypeError("Failed to execute 'putImageData' on " +
+          "'CanvasRenderingContext2D': The provided value is not of type 'ImageData'.");
+      }
+      this._lastImg = img;
+    },
     getImageData(x, y, w, h) {
       noop('getImageData');
-      return { width: w, height: h, data: new Uint8ClampedArray(w * h * 4) };
+      return new StubImageData(w, h);
     },
     createImageData(w, h) {
       noop('createImageData');
-      return { width: w, height: h, data: new Uint8ClampedArray(w * h * 4) };
+      return new StubImageData(w, h);
     },
   };
   /* noop 在对象字面量之后定义：它要同时累加全局计数与**本上下文**的计数，
@@ -269,4 +295,4 @@ function load(opts) {
   };
 }
 
-module.exports = { load };
+module.exports = { load, StubImageData };
