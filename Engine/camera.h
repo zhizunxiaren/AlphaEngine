@@ -155,7 +155,8 @@ class camera{
             point3 pixel_sample = pixel00_loc + (i + offset.x()) * pixel_delta_u + (j + offset.y()) * pixel_delta_v;
             point3 ray_origin = (defocus_angle <= 0) ? center : defocus_disk_sample(rng);
             vec3 ray_direction = pixel_sample - ray_origin;
-            return ray(ray_origin, ray_direction);
+            double time = rng.next(0, 1);
+            return ray(ray_origin, ray_direction, time);
 
         }
 

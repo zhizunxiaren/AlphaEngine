@@ -6,12 +6,31 @@
 class sphere : public hittable{
     
     public:
-        sphere(const point3& center, double radius, shared_ptr<material> mat) : center(center), 
-            radius(std::fmax(0,radius)), mat(mat){
-        };
+    
+        sphere(const point3& static_center, double radius, shared_ptr<material> mat) 
+            : center(static_center, vec3(0,0,0)), radius(std::fmax(0,radius)), mat(mat)
+        {
+            auto rvec = vec3(radius, radius, radius);
+            bbox = aabb(static_center - rvec, static_center + rvec);
+        }
+    
+        sphere(const point3& center1, const point3& center2, double radius, shared_ptr<material> mat) 
+            : center(center1, center2 - center1), radius(std::fmax(0,radius)), mat(mat)
+        {
+            auto rvec = vec3(radius, radius, radius);
+            aabb bbox1 = aabb(center.at(0) - rvec, center.at(0) + rvec);
+            aabb bbox2 = aabb(center.at(1) - rvec, center.at(1) + rvec);
+            bbox = aabb(bbox1, bbox2);
+        }
+    
+        aabb bounding_box() const override
+        {
+            return bbox;
+        }
 
         bool hit(const ray& r, interval ray_t, hit_record& hitrecord) const override{
-            vec3 oc = center - r.origin();
+            point3 current_center = center.at(r.time());
+            vec3 oc = current_center - r.origin();
             auto a = r.direction().length_squared();
             auto h = dot(r.direction(), oc);
             auto c = oc.length_squared() - radius*radius;
@@ -35,7 +54,7 @@ class sphere : public hittable{
 
             hitrecord.t = root;
             hitrecord.p = r.at(hitrecord.t);
-            vec3 outward_normal = (hitrecord.p - center) / radius;
+            vec3 outward_normal = (hitrecord.p - current_center) / radius;
             hitrecord.set_face_normal(r, outward_normal);
             hitrecord.mat = mat;
 
@@ -44,7 +63,8 @@ class sphere : public hittable{
 
 
     private:
-        point3 center;
+        ray center;
         double radius;
         shared_ptr<material> mat;
+        aabb bbox;
 };

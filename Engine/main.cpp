@@ -1,3 +1,4 @@
+#include "bvh.h"
 #include "camera.h"
 
 #include "hittable.h"
@@ -38,9 +39,9 @@ int main()
     auto ground_material = make_shared<lambertian>(color(0.5, 0.5, 0.5));
     world.add(make_shared<sphere>(point3(0,-1000,0), 1000, ground_material));
     
-    for (int i = 0; i < 22; i++)
+    for (int i = -11; i < 22; i++)
     {
-        for (int j = 0; j < 22; j++)
+        for (int j = -11; j < 22; j++)
         {
             auto choose_mat = scene_rng.next();
             point3 center(i + 0.9 * scene_rng.next(), 0.2, j + 0.9 * scene_rng.next());
@@ -53,7 +54,8 @@ int main()
                     // diffuse
                     auto albedo = vec3::random(scene_rng) * vec3::random(scene_rng);
                     sphere_material = make_shared<lambertian>(albedo);
-                    world.add(make_shared<sphere>(center, 0.2, sphere_material));
+                    auto center2 = center + vec3(0, scene_rng.next(0, 0.5), 0);
+                    world.add(make_shared<sphere>(center, center2, 0.2, sphere_material));
                 }else if (choose_mat < 0.95) {
                     // metal
                     auto albedo = vec3::random(scene_rng, 0.5, 1);
@@ -68,7 +70,7 @@ int main()
             }
         }
     }
-
+        
     auto material1 = make_shared<dielectric>(1.5);
     world.add(make_shared<sphere>(point3(0, 1, 0), 1.0, material1));
 
@@ -77,6 +79,8 @@ int main()
 
     auto material3 = make_shared<metal>(color(0.7, 0.6, 0.5), 0.0);
     world.add(make_shared<sphere>(point3(4, 1, 0), 1.0, material3));
+    
+    world = hittable_list(make_shared<bvh_node>(world));
     
     camera cam;
     cam.aspect_ratio = 16.0 / 9.0;

@@ -43,6 +43,17 @@ struct rng_t
     {
         return lo + (hi - lo) * next();
     }
+    
+    int next_int(int lo, int hi)
+    {
+        assert(lo <= hi && "next_int: lo must be <= hi");
+        return std::uniform_int_distribution<int>(lo, hi)(engine);
+    }
+    
+    int next_int(int hi)
+    {
+        return next_int(0, hi -1);
+    }
 };
 
 // 把线程序号这类相邻整数打散成互不相关的种子。
@@ -55,7 +66,6 @@ inline std::uint32_t mix_seed(std::uint32_t x)
     x = (x^(x>>15)) * 0x735a2d97u;
     return x ^ (x >> 15);
 }
-
 
 // Common Headers
 
