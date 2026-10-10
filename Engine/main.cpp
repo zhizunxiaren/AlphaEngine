@@ -5,10 +5,11 @@
 #include "hittable_list.h"
 #include "sphere.h"
 #include "material.h"
+#include "texture.h"
 
-
-int main()
+void bouncing_spheres()
 {
+
     hittable_list world;
 
     // auto material_ground = make_shared<lambertian>(color(0.8, 0.8, 0.0));
@@ -30,15 +31,17 @@ int main()
     //
     // world.add(make_shared<sphere>(point3(-R, 0, -1), R, material_left));
     // world.add(make_shared<sphere>(point3( R, 0, -1), R, material_right));
-    
+
     // 场景构建是单线程的，单独持有一个 rng。
     // 固定种子 → 每次运行得到同一个场景，便于对比渲染参数的改动。
     constexpr std::uint32_t SCENE_SEED = 5489;
     rng_t scene_rng(SCENE_SEED);
-    
-    auto ground_material = make_shared<lambertian>(color(0.5, 0.5, 0.5));
-    world.add(make_shared<sphere>(point3(0,-1000,0), 1000, ground_material));
-    
+
+    //auto ground_material = make_shared<lambertian>(color(0.5, 0.5, 0.5));
+    //world.add(make_shared<sphere>(point3(0,-1000,0), 1000, ground_material));
+    auto checker = make_shared<checker_texture>(0.32, color(0.2, 0.3, 0.1), color(0.9, 0.9, 0.9));
+    world.add(make_shared<sphere>(point3(0,-1000,0), 1000, make_shared<lambertian>(checker)));
+
     for (int i = -11; i < 22; i++)
     {
         for (int j = -11; j < 22; j++)
@@ -48,7 +51,7 @@ int main()
             if ((center - point3(4, 0.2, 0)).length() > 0.9)
             {
                 shared_ptr<material> sphere_material;
-                
+
                 if (choose_mat < 0.8 )
                 {
                     // diffuse
@@ -70,7 +73,7 @@ int main()
             }
         }
     }
-        
+
     auto material1 = make_shared<dielectric>(1.5);
     world.add(make_shared<sphere>(point3(0, 1, 0), 1.0, material1));
 
@@ -79,9 +82,9 @@ int main()
 
     auto material3 = make_shared<metal>(color(0.7, 0.6, 0.5), 0.0);
     world.add(make_shared<sphere>(point3(4, 1, 0), 1.0, material3));
-    
+
     world = hittable_list(make_shared<bvh_node>(world));
-    
+
     camera cam;
     cam.aspect_ratio = 16.0 / 9.0;
     cam.image_width  = 1200;
@@ -97,5 +100,57 @@ int main()
 
 }
 
+void checker_spheres()
+{
+    hittable_list world;
 
+    auto checker = make_shared<checker_texture>(0.32, color(0.2, 0.3, 0.1), color(0.9, 0.9, 0.9));
+    world.add(make_shared<sphere>(point3(0,-1000,0), 1000, make_shared<lambertian>(checker)));
 
+    world.add(make_shared<sphere>(point3(0,-10, 0), 10, make_shared<lambertian>(checker)));
+    world.add(make_shared<sphere>(point3(0, 10, 0), 10, make_shared<lambertian>(checker)));
+
+    camera cam;
+    cam.aspect_ratio = 16.0 / 9.0;
+    cam.image_width  = 400;
+    cam.sample_per_pixel = 100;
+    cam.max_depth = 50;
+    cam.vfov = 20.0;
+    cam.lookfrom = point3(13,2,3);
+    cam.lookat   = point3(0,0, 0);
+    cam.vup      = vec3(0,1,0);
+    cam.defocus_angle = 0.0;
+    //cam.focus_dist = 10;
+    cam.render(world);
+}
+
+void earth()
+{
+    // 贴图放在仓库的 resource/images 下，这里直接用绝对路径，不依赖 RTW_IMAGES 环境变量。
+    // Windows 下用正斜杠，省去反斜杠转义；stbi 底层走 fopen，正斜杠可以正常打开。
+    auto earth_texture = make_shared<image_texture>("D:/Alpha/AlphaEngine/resource/images/earthmap.jpg");
+    auto earth_surface = make_shared<lambertian>(earth_texture);
+    auto globe = make_shared<sphere>(point3(0, 0, 0), 2, earth_surface);
+
+    camera cam;
+    cam.aspect_ratio = 16.0 / 9.0;
+    cam.image_width  = 400;
+    cam.sample_per_pixel = 100;
+    cam.max_depth = 50;
+    cam.vfov = 20.0;
+    cam.lookfrom = point3(0,0,12);
+    cam.lookat   = point3(0,0, 0);
+    cam.vup      = vec3(0,1,0);
+    cam.defocus_angle = 0.0;
+    cam.render(hittable_list(globe));
+}
+
+int main()
+{
+    switch(3)
+    {
+        case 1 : bouncing_spheres(); break;
+        case 2 : checker_spheres(); break;
+        case 3 : earth(); break;
+    }
+}

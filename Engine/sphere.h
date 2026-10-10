@@ -2,19 +2,20 @@
 
 #include "hittable.h"
 #include "vec3.h"
+#include "rtweekend.h"
 
 class sphere : public hittable{
-    
+
     public:
-    
-        sphere(const point3& static_center, double radius, shared_ptr<material> mat) 
+
+        sphere(const point3& static_center, double radius, shared_ptr<material> mat)
             : center(static_center, vec3(0,0,0)), radius(std::fmax(0,radius)), mat(mat)
         {
             auto rvec = vec3(radius, radius, radius);
             bbox = aabb(static_center - rvec, static_center + rvec);
         }
-    
-        sphere(const point3& center1, const point3& center2, double radius, shared_ptr<material> mat) 
+
+        sphere(const point3& center1, const point3& center2, double radius, shared_ptr<material> mat)
             : center(center1, center2 - center1), radius(std::fmax(0,radius)), mat(mat)
         {
             auto rvec = vec3(radius, radius, radius);
@@ -22,7 +23,7 @@ class sphere : public hittable{
             aabb bbox2 = aabb(center.at(1) - rvec, center.at(1) + rvec);
             bbox = aabb(bbox1, bbox2);
         }
-    
+
         aabb bounding_box() const override
         {
             return bbox;
@@ -56,6 +57,7 @@ class sphere : public hittable{
             hitrecord.p = r.at(hitrecord.t);
             vec3 outward_normal = (hitrecord.p - current_center) / radius;
             hitrecord.set_face_normal(r, outward_normal);
+            get_sphere_uv(outward_normal, hitrecord.u, hitrecord.v);
             hitrecord.mat = mat;
 
             return true;
@@ -67,4 +69,20 @@ class sphere : public hittable{
         double radius;
         shared_ptr<material> mat;
         aabb bbox;
+
+        static void get_sphere_uv(const point3& p, double& u, double& v)
+        {
+            // p: a given point on the sphere of radius one, centered at the origin.
+            // u: returned value [0,1] of angle around the Y axis from X=-1.
+            // v: returned value [0,1] of angle from Y=-1 to Y=+1.
+            //     <1 0 0> yields <0.50 0.50>       <-1  0  0> yields <0.00 0.50>
+            //     <0 1 0> yields <0.50 1.00>       < 0 -1  0> yields <0.50 0.00>
+            //     <0 0 1> yields <0.25 0.50>       < 0  0 -1> yields <0.75 0.50>
+
+            auto theta = std::acos(-p.y());
+            auto phi = std::atan2(-p.z(), p.x()) + pi;
+
+            u = phi / (2 * pi);
+            v = theta / pi;
+        }
 };
