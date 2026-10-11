@@ -32,6 +32,15 @@
     <ClInclude Include="vec3.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="perlin.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="rtw_stb_image.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="texture.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
     <ClInclude Include="third_party\stb\stb_image.h">
       <Filter>第三方</Filter>
     </ClInclude>

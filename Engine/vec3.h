@@ -20,12 +20,12 @@ class vec3 {
 
     constexpr double operator[](std::size_t i) const {
         assert(i < 3);
-        return e[i]; 
+        return e[i];
     }
 
     constexpr double& operator[](std::size_t i) {
         assert(i < 3);
-        return e[i]; 
+        return e[i];
     }
 
     constexpr vec3& operator+=(const vec3& v) {
@@ -62,7 +62,7 @@ class vec3 {
         return e[0]*e[0] + e[1]*e[1] + e[2]*e[2];
     }
 
-    // 归一化前判断退化向量，避免除零产生 NaN 
+    // 归一化前判断退化向量，避免除零产生 NaN
     bool near_zero() const noexcept {
         constexpr double s = 1e-8;
         return (std::fabs(e[0]) < s ) && (std::fabs(e[1]) < s ) && (std::fabs(e[2]) < s );
