@@ -98,8 +98,8 @@ class camera{
     }
 
     private:
-        int    image_height;   // Rendered image height
-        double pixel_sample_scale; // Color scale factor for a sum of pixel samples
+        int    image_height = 0;   // Rendered image height（initialize() 里算，先给个确定值）
+        double pixel_sample_scale = 1.0; // Color scale factor for a sum of pixel samples
         point3 center;         // Camera center
         point3 pixel00_loc;    // Location of pixel 0, 0
         vec3   pixel_delta_u;  // Offset to pixel to the right

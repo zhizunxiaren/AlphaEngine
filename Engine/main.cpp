@@ -6,6 +6,15 @@
 #include "sphere.h"
 #include "material.h"
 #include "texture.h"
+#include "quad.h"
+
+// 贴图放在仓库根目录下的 resource/images。之前写的是 D:/... ，但仓库实际在 I: 盘，
+// 加载失败时 image_texture 会退化成纯青色（0,1,1），连 UV 对不对都看不出来。
+// Windows 下用正斜杠，省去反斜杠转义；stbi 底层走 fopen，正斜杠可以正常打开。
+//
+// 更可移植的做法：设置环境变量 RTW_IMAGES 指向该目录，然后把这里改成 "earthmap.jpg"
+// （rtw_image 会优先在 RTW_IMAGES 目录里找，见 rtw_stb_image.h:54）。
+constexpr const char* EARTH_TEXTURE_PATH = "I:/Alpha/AlphaEngine/resource/images/earthmap.jpg";
 
 void bouncing_spheres()
 {
@@ -126,9 +135,7 @@ void checker_spheres()
 
 void earth()
 {
-    // 贴图放在仓库的 resource/images 下，这里直接用绝对路径，不依赖 RTW_IMAGES 环境变量。
-    // Windows 下用正斜杠，省去反斜杠转义；stbi 底层走 fopen，正斜杠可以正常打开。
-    auto earth_texture = make_shared<image_texture>("D:/Alpha/AlphaEngine/resource/images/earthmap.jpg");
+    auto earth_texture = make_shared<image_texture>(EARTH_TEXTURE_PATH);
     auto earth_surface = make_shared<lambertian>(earth_texture);
     auto globe = make_shared<sphere>(point3(0, 0, 0), 2, earth_surface);
 
@@ -170,13 +177,94 @@ void perlin_sphere()
     cam.render(world);
 }
 
+void quads()
+{
+    hittable_list world;
+    
+    // materials
+    auto left_red = make_shared<lambertian>(color(1.0, 0.2, 0.2));
+    auto back_green = make_shared<lambertian>(color(0.2, 1.0, 0.2));
+    auto right_blue = make_shared<lambertian>(color(0.0, 0.2, 0.1));
+    auto upper_orange = make_shared<lambertian>(color(1.0, 0.5, 0.2));
+    auto lower_teal = make_shared<lambertian>(color(0.2, 0.8, 0.8));
+    
+    // quads
+    world.add(make_shared<quad>(point3(-3,-2, 5), vec3(0, 0,-4), vec3(0, 4, 0), left_red));
+    world.add(make_shared<quad>(point3(-2,-2, 0), vec3(4, 0, 0), vec3(0, 4, 0), back_green));
+    world.add(make_shared<quad>(point3( 3,-2, 1), vec3(0, 0, 4), vec3(0, 4, 0), right_blue));
+    world.add(make_shared<quad>(point3(-2, 3, 1), vec3(4, 0, 0), vec3(0, 0, 4), upper_orange));
+    world.add(make_shared<quad>(point3(-2,-3, 5), vec3(4, 0, 0), vec3(0, 0,-4), lower_teal));
+    
+    camera cam;
+    cam.aspect_ratio = 16.0 / 9.0;
+    cam.image_width  = 400;
+    cam.sample_per_pixel = 100;
+    cam.max_depth = 50;
+    cam.vfov = 80.0;
+    cam.lookfrom = point3(0, 0, 9);
+    cam.lookat   = point3(0,0, 0);
+    cam.vup      = vec3(0,1,0);
+    cam.defocus_angle = 0.0;
+    //cam.focus_dist = 10;
+    cam.render(world);
+    
+}
+
+void quad_test(int shape_id = 0) {
+    hittable_list world;
+
+    // 用带贴图的材质，能同时看出几何轮廓和 UV 映射对不对。
+    auto earth_texture = make_shared<image_texture>(EARTH_TEXTURE_PATH);
+    auto mat = make_shared<lambertian>(earth_texture);
+
+    camera cam;
+    cam.image_width      = 400;
+    cam.aspect_ratio     = 1.0;
+    cam.sample_per_pixel = 4;
+    cam.max_depth        = 4;
+    cam.defocus_angle    = 0.0;
+    cam.vfov             = 20.0;
+    cam.lookfrom         = point3(0,0,12);
+    cam.lookat           = point3(0,0,0);
+
+    shared_ptr<hittable> thing;
+    switch (shape_id) {
+    default:
+    case 0:
+        thing = make_shared<quad>(point3(-2,-1,0), vec3(4,0,0), vec3(0,2,0), mat);
+        break;
+    case 1:
+        cam.vfov = 30.0;
+        cam.lookat = point3(1,0,0);
+        thing = make_shared<quad>(point3(-2,-1,0), vec3(4,0,0), vec3(2,2,0), mat);
+        break;
+    case 2:
+        thing = make_shared<tri>(point3(-2,-1,0), vec3(4,0,0), vec3(0,2,0), mat);
+        break;
+    case 3:
+        thing = make_shared<ellipse>(point3(0,0,0), vec3(2,0,0), vec3(0,1,0), mat);
+        break;
+    case 4:
+        thing = make_shared<annulus>(point3(0,0,0), vec3(2,0,0), vec3(0,1,0), 0.60, mat);
+        break;
+    }
+
+    world.add(thing);
+    cam.render(world);
+}
+
 int main()
 {
-    switch(4)
+    switch(6)
     {
         case 1 : bouncing_spheres(); break;
         case 2 : checker_spheres(); break;
         case 3 : earth(); break;
         case 4 : perlin_sphere(); break;
+        case 5 : quads(); break;
+        case 6 : quad_test(4); break;   // 几何自测：参数 0~4 分别是 quad/斜 quad/tri/ellipse/annulus
+        default: break;
     }
+
+    return 0;
 }
