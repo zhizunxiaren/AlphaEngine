@@ -6,7 +6,7 @@ aliases:
 type: moc
 status: active
 area: project
-updated: 2026-09-23
+updated: 2026-10-26
 tags:
   - moc
   - rendering
@@ -44,10 +44,11 @@ flowchart LR
 
 ## 导航
 
+- **我要从零学图形学** → [[20-Knowledge/Concepts/图形学基础与渲染流程|基础篇：概念、流程、动画与复习]]（现代专题 TODO）
 - **我要了解整个项目** → [[10-Outcomes/10-AlphaEngine]]
 - **我要查询术语或设计理由** → [[20-Knowledge/00-Knowledge-MOC]]
 - **我要追溯外部依据** → [[30-Sources/00-Sources-MOC]]
-- **我要动手看演示** → [[20-Knowledge/Tooling/教学演示页]]（`docs/demos/` 两页交互讲解页）
+- **我要动手看演示** → [[20-Knowledge/Tooling/教学演示页]]（`docs/demos/` 四页交互讲解页）
 - **我要维护文档系统** → [[90-System/LLM-Wiki-Obsidian]]
 
 ## 知识库规则

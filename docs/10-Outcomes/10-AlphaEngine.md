@@ -7,7 +7,7 @@ type: project
 status: working
 area: roadmap
 parent: "[[00-Home]]"
-updated: 2026-09-21
+updated: 2026-10-21
 tags:
   - rendering
   - roadmap
@@ -70,6 +70,12 @@ AlphaEngine 的长期目标是**现代高性能实时渲染器**而非通用游�
 - 资源绑定方向（Bindless / Descriptor Table 等）
 
 上述选择一旦确认，作为 Decision 进入知识层，并同步为本文档或对应里程碑 owner note 的确认基线。
+
+## 学习资料范围（2026-10-21 已对齐）
+
+本次用户确认当前科普聚焦**图形学基础**，现代图形学应为 TODO。基础教程通过概念、可操作动画、流程图与复习帮助初学者理解三维渲染；其范围与入口由 [[20-Knowledge/Concepts/图形学基础与渲染流程]] 汇总，资产归 [[20-Knowledge/Tooling/教学演示页]]。
+
+此范围只约束学习资料：现代 PBR、实时全局光照、时域方法、现代 GPU/API 与渲染架构等尚未编写，不据此决定引擎技术栈、版本或实现义务。上面的首版基线待决项保持待决。
 
 ## 按需参考
 

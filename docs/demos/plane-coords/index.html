@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>平面坐标与对偶基 · 可视化拆解</title>
+<style>
+:root{
+  --bg:#f4f5f8; --card:#ffffff; --ink:#16191f; --muted:#6b7280; --line:#e4e7ec;
+  --accent:#5450d8; --accent-soft:#eeedfd;
+  --u:#1d4ed8; --u-soft:#e8effc;
+  --v:#0e9384; --v-soft:#e6f6f4;
+  --dual:#7c3aed; --dual-soft:#f2ecfd;
+  --p:#c2410c; --p-soft:#fdf0e7;
+  --warn:#be123c; --warn-soft:#fdeef2;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font:15px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1160px; margin:0 auto; padding:26px 22px 90px}
+
+.hero{background:linear-gradient(140deg,#12172a 0%,#1d1b3d 55%,#2a1f45 100%);
+  border-radius:18px; padding:30px 32px 26px; color:#eef0ff; margin-bottom:20px; position:relative; overflow:hidden}
+.hero::after{content:""; position:absolute; right:-70px; top:-70px; width:260px; height:260px;
+  border-radius:50%; background:radial-gradient(circle,rgba(124,120,255,.40),transparent 68%)}
+.hero .kicker{font:600 11px/1 var(--mono); letter-spacing:.2em; text-transform:uppercase; color:#9a95ff}
+.hero h1{margin:12px 0 8px; font-size:29px; line-height:1.25; letter-spacing:-.01em}
+.hero p{margin:0; color:#b9bdd6; font-size:14.5px; max-width:680px}
+.hero .meta{margin-top:16px; display:flex; flex-wrap:wrap; gap:8px}
+.hero .meta span{font:500 11.5px/1 var(--mono); background:rgba(255,255,255,.09);
+  border:1px solid rgba(255,255,255,.13); padding:5px 10px; border-radius:999px; color:#c8cbe4}
+
+.stage{display:grid; grid-template-columns:minmax(0,1fr) 296px; gap:16px; align-items:start}
+@media (max-width:860px){ .stage{grid-template-columns:minmax(0,1fr)} }
+
+.canvas-box{background:var(--card); border:1px solid var(--line); border-radius:14px;
+  padding:12px 12px 10px; box-shadow:0 1px 2px rgba(16,24,40,.04); min-width:0}
+.cv-wrap{position:relative; width:100%; aspect-ratio:16/10; min-height:340px}
+canvas{width:100%; height:100%; display:block; border-radius:8px; touch-action:none; cursor:crosshair}
+
+.tabs{display:flex; flex-wrap:wrap; gap:7px; margin-top:10px}
+.tabs button{
+  font:500 12.5px/1 inherit; padding:8px 13px; border-radius:8px; cursor:pointer;
+  border:1px solid var(--line); background:#fff; color:#4b5563; transition:all .16s;
+}
+.tabs button:hover{background:#f6f7fa; color:var(--ink)}
+.tabs button.on{background:var(--accent); border-color:var(--accent); color:#fff}
+
+.panel{background:var(--card); border:1px solid var(--line); border-radius:14px;
+  padding:16px 16px 14px; box-shadow:0 1px 2px rgba(16,24,40,.04); min-width:0}
+.panel h3{margin:0 0 10px; font-size:12px; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--muted); font-weight:700}
+
+.read{display:grid; grid-template-columns:minmax(0,1fr) auto; gap:3px 10px; font-size:13px; margin-bottom:14px}
+.read dt{color:var(--muted); margin:0; min-width:0}
+.read dd{margin:0; font:500 13px/1.5 var(--mono); text-align:right; color:var(--ink); white-space:nowrap}
+.read dd.a{color:var(--p)}
+.read dd.b{color:var(--v)}
+.read dd.bad{color:var(--warn)}
+.read dd.ok{color:var(--dual)}
+
+.row{margin:10px 0}
+.row label{display:flex; justify-content:space-between; font-size:12.5px; color:#4b5563; margin-bottom:4px}
+.row label b{font:500 12.5px var(--mono); color:var(--ink)}
+input[type=range]{width:100%; accent-color:var(--accent); height:18px}
+
+.checks{display:grid; grid-template-columns:1fr 1fr; gap:6px 8px; margin:12px 0 6px;
+  padding-top:12px; border-top:1px solid var(--line)}
+.checks label{font-size:12.5px; color:#4b5563; display:flex; align-items:center; gap:6px; cursor:pointer}
+input[type=checkbox]{accent-color:var(--accent); width:14px; height:14px}
+
+.btn{width:100%; margin-top:10px; padding:8px; font:500 12.5px inherit; cursor:pointer;
+  border:1px solid var(--line); background:#fff; border-radius:8px; color:#4b5563}
+.btn:hover{background:#f6f7fa; color:var(--ink)}
+.hint{margin:10px 0 0; font-size:11.5px; color:var(--muted); line-height:1.6}
+
+.card{background:var(--card); border:1px solid var(--line); border-radius:14px;
+  padding:22px 24px; box-shadow:0 1px 2px rgba(16,24,40,.04); margin-top:16px}
+.card h2{margin:0 0 10px; font-size:19px; letter-spacing:-.01em}
+.card p{margin:8px 0}
+code{font:12.5px/1.6 var(--mono); background:#eef0f4; padding:1.5px 6px; border-radius:5px; color:#3b3f52}
+.eq{font:13.5px/1.8 var(--mono); background:#f7f8fb; border:1px solid var(--line);
+  border-radius:9px; padding:12px 14px; margin:12px 0; overflow-x:auto; white-space:pre}
+.eq b{color:var(--dual); font-weight:600}
+.note{border-radius:10px; padding:11px 14px; margin:12px 0; font-size:14px; line-height:1.7}
+.note.i{background:var(--accent-soft); border-left:3px solid var(--accent)}
+.note.w{background:var(--warn-soft); border-left:3px solid var(--warn)}
+.note.t{background:var(--v-soft); border-left:3px solid var(--v)}
+table{width:100%; border-collapse:collapse; margin:12px 0; font-size:13.5px; table-layout:fixed}
+th,td{text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top;
+  word-break:break-word; overflow-wrap:anywhere}
+th{font-weight:600; color:#374151; background:#fafbfc}
+td.m{font-family:var(--mono); font-size:12.5px; line-height:1.75}
+#err{display:none; margin:0 0 12px; padding:10px 14px; border-radius:9px;
+  background:#fee2e2; border:1px solid #fca5a5; color:#7f1d1d; font:12.5px/1.6 var(--mono)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="err"></div>
+
+  <header class="hero">
+    <div class="kicker">Plane Coordinates · Dual Basis</div>
+    <h1>α、β 到底是怎么读出来的</h1>
+    <p>一个点在斜网格里的坐标，等于「沿 u 走了几格」。要数出这个格数，需要一把只认一个方向的尺子 —— 那把尺子就是对偶基 u<sup>*</sup>。</p>
+    <div class="meta"><span>α = p · u*</span><span>u* ⊥ v</span><span>|u*| = 1 / h</span><span>UV 参数化</span></div>
+  </header>
+
+  <div class="stage">
+    <div class="canvas-box">
+      <div class="cv-wrap"><canvas id="cv" aria-label="斜基坐标与对偶基交互演示"></canvas></div>
+      <div class="tabs" id="tabs">
+        <button data-scene="0" class="on">① 数格子</button>
+        <button data-scene="1">② 点积的陷阱</button>
+        <button data-scene="2">③ 对偶基尺子</button>
+        <button data-scene="3">④ 叉积不变量</button>
+      </div>
+    </div>
+
+    <aside class="panel">
+      <h3>实时读数</h3>
+      <dl class="read">
+        <dt>α（沿 u）</dt><dd class="a" id="rA">0.00</dd>
+        <dt>β（沿 v）</dt><dd class="b" id="rB">0.00</dd>
+        <dt>直接点积 α′</dt><dd class="bad" id="rNaive">0.00</dd>
+        <dt>误差 α′ − α</dt><dd class="bad" id="rErr">0.00</dd>
+        <dt>格厚 h<sub>u</sub></dt><dd id="rH">0.00</dd>
+        <dt>|u*|</dt><dd class="ok" id="rUstar">0.00</dd>
+      </dl>
+
+      <h3>基向量</h3>
+      <div class="row">
+        <label>u 与 v 的夹角 <b id="vTh">68°</b></label>
+        <input type="range" id="sTh" min="45" max="115" step="1" value="68" />
+      </div>
+      <div class="row">
+        <label>|u| <b id="vU">1.80</b></label>
+        <input type="range" id="sU" min="1" max="2.1" step="0.01" value="1.8" />
+      </div>
+      <div class="row">
+        <label>|v| <b id="vV">1.45</b></label>
+        <input type="range" id="sV" min="1" max="2.1" step="0.01" value="1.45" />
+      </div>
+      <p class="hint" style="margin:6px 0 0">两根滑块量程相同：滑到同一位置，u 与 v 就一样长。</p>
+
+      <div class="checks">
+        <label><input type="checkbox" id="cGrid" checked />网格</label>
+        <label><input type="checkbox" id="cDual" checked />对偶基</label>
+        <label><input type="checkbox" id="cProj" checked />投影</label>
+        <label><input type="checkbox" id="cArea" checked />面积</label>
+      </div>
+
+      <button class="btn" id="btnPlay">重新播放动画</button>
+      <p class="hint">拖动橙色点 P 可自由移动；拖动后会接管动画，点上方按钮恢复。</p>
+    </aside>
+  </div>
+
+  <section class="card" id="explain"></section>
+
+  <section class="card">
+    <h2>公式对照</h2>
+    <table>
+      <tr><th style="width:120px">项目</th><th>式子</th></tr>
+      <tr><td>平面参数化</td><td class="m">P = Q + α·u + β·v</td></tr>
+      <tr><td>对偶基</td><td class="m">u* = (v.y, −v.x) / (u×v)　　v* = (−u.y, u.x) / (u×v)</td></tr>
+      <tr><td>读坐标</td><td class="m"><b>α = (P−Q) · u*</b>　　<b>β = (P−Q) · v*</b></td></tr>
+      <tr><td>正交性</td><td class="m">u*·u = 1，u*·v = 0　　v*·v = 1，v*·u = 0</td></tr>
+      <tr><td>尺子长度</td><td class="m">|u*| = 1 / h<sub>u</sub>　　h<sub>u</sub> = |u×v| / |v|</td></tr>
+      <tr><td>叉积形式</td><td class="m">α = w · ((P−Q) × v)　　w = (u×v) / |u×v|²</td></tr>
+    </table>
+    <div class="note w">直接点积 <code>α′ = (p·u)/(u·u)</code> 得到的是<b>垂直投影</b>，不是坐标。多出来的量恰好是 <code>β·(u·v)/|u|²</code> —— 也就是 β 沿着「斜」漏进了 α。</div>
+  </section>
+
+  <section class="card">
+    <h2>三个容易记错的点</h2>
+    <table>
+      <tr><th>常见误解</th><th>实际情况</th></tr>
+      <tr><td>对偶基就是互相垂直</td><td>它是<b>互易</b>关系：u<sup>*</sup> 垂直于 v（交叉），但 u<sup>*</sup> 与 u 的夹角一般不是 90°，且 u<sup>*</sup>·u = 1。</td></tr>
+      <tr><td>α 是距离或投影长度</td><td>α 是<b>格数</b>，无量纲。同一格在不同基长度下对应的欧氏距离不同。</td></tr>
+      <tr><td>α 与 β 的叉积顺序可以对称写</td><td>必须写成 p×v 与 u×p。若对称写成 v×p，得到的是 −α，因为叉积反交换。</td></tr>
+    </table>
+  </section>
+
+</div>
+
+<script>
+(function(){
+'use strict';
+
+if(!window.__planeCoords){
+  window.addEventListener('error', function(e){
+    var box = document.getElementById('err');
+    if(!box) return;
+    box.style.display = 'block';
+    box.textContent = '脚本异常：' + (e.message || e.error) + '（第 ' + (e.lineno || '?') + ' 行）';
+  });
+}
+
+/* ---------------- 纯数学：可被 _verify.js 单独抽取执行 ---------------- */
+// __MATH_BEGIN__
+function dot2(a, b){ return a[0]*b[0] + a[1]*b[1]; }
+function cross2(a, b){ return a[0]*b[1] - a[1]*b[0]; }
+function len2(a){ return Math.hypot(a[0], a[1]); }
+function add2(a, b){ return [a[0]+b[0], a[1]+b[1]]; }
+function sub2(a, b){ return [a[0]-b[0], a[1]-b[1]]; }
+function mul2(a, s){ return [a[0]*s, a[1]*s]; }
+
+function basisFrom(thetaDeg, uLen, vLen){
+  var th = thetaDeg * Math.PI / 180;
+  return { u: [uLen, 0], v: [vLen*Math.cos(th), vLen*Math.sin(th)] };
+}
+
+/* 对偶基（倒易基）：u* 垂直于 v，v* 垂直于 u，且满足 u*·u = 1 */
+function dualBasis(u, v){
+  var n = cross2(u, v);
+  var scale = len2(u) * len2(v);
+  if(!(Math.abs(n) > 1e-9 * scale)) return null;
+  return { n: n, uStar: [v[1]/n, -v[0]/n], vStar: [-u[1]/n, u[0]/n] };
+}
+
+function planeCoords(u, v, p){
+  var d = dualBasis(u, v);
+  if(!d) return null;
+  return {
+    alpha: dot2(p, d.uStar),
+    beta:  dot2(p, d.vStar),
+    n: d.n, uStar: d.uStar, vStar: d.vStar
+  };
+}
+
+/* 直接对 u 点积得到的“假 α”：正交投影系数 */
+function naiveAlpha(u, p){ return dot2(u, p) / dot2(u, u); }
+
+/* 以 v 为底时，u 端点到基线的垂直距离（格子的“厚”） */
+function heightOnBase(u, v){
+  var lv = len2(v);
+  if(!(lv > 1e-12)) return NaN;
+  return Math.abs(cross2(u, v)) / lv;
+}
+
+function areaOf(a, b){ return Math.abs(cross2(a, b)); }
+
+/* 视口包围盒：由基向量与对偶基端点算出，用于自动取景 */
+function basisBounds(u, v){
+  var d = dualBasis(u, v);
+  var pts = [[0, 0], u, v, add2(u, v)];
+  if(d){ pts.push(d.uStar, d.vStar); }
+  var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for(var i = 0; i < pts.length; i++){
+    var q = pts[i];
+    if(q[0] < minX) minX = q[0];
+    if(q[0] > maxX) maxX = q[0];
+    if(q[1] < minY) minY = q[1];
+    if(q[1] > maxY) maxY = q[1];
+  }
+  return { minX: minX, maxX: maxX, minY: minY, maxY: maxY };
+}
+// __MATH_END__
+
+/* ---------------- 状态 ---------------- */
+var Q = [0, 0];
+
+var S = {
+  scene: 0,
+  theta: 68, thetaT: 68,
+  uLen: 1.8, uLenT: 1.8,
+  vLen: 1.45, vLenT: 1.45,
+  alpha: 0.78, beta: 0.62,
+  manual: false,
+  showGrid: true, showDual: true, showProj: true, showArea: true,
+  t: 0
+};
+
+var cv = document.getElementById('cv');
+var ctx = cv.getContext('2d');
+var W = 800, H = 500, DPR = 1;
+var scale = 120, ox = 120, oy = 400;
+
+/* ---------------- 坐标变换（自动取景 + 平滑缩放） ---------------- */
+var scale = 120, ox = 120, oy = 400;
+var SB = null;                                  /* 平滑后的取景框 */
+var VB = { minX: -1, maxX: 3, minY: -0.4, maxY: 2.2 };  /* 目标取景框，拖拽时用 */
+
+function updateView(u, v, dt){
+  var b = basisBounds(u, v);
+  var pad = 0.20;
+  var t = { minX: b.minX - pad, maxX: b.maxX + pad, minY: b.minY - pad, maxY: b.maxY + pad };
+
+  if(!SB){
+    SB = { minX: t.minX, maxX: t.maxX, minY: t.minY, maxY: t.maxY };
+  } else {
+    var k = Math.min(1, (dt || 0) * 7);
+    SB.minX += (t.minX - SB.minX) * k;
+    SB.maxX += (t.maxX - SB.maxX) * k;
+    SB.minY += (t.minY - SB.minY) * k;
+    SB.maxY += (t.maxY - SB.maxY) * k;
+  }
+  VB = t;
+
+  var vw = Math.max(0.2, SB.maxX - SB.minX);
+  var vh = Math.max(0.2, SB.maxY - SB.minY);
+  scale = Math.min(W * 0.94 / vw, H * 0.90 / vh);
+  var cw = vw * scale, ch = vh * scale;
+  ox = W * 0.03 + (W * 0.94 - cw) / 2 - SB.minX * scale;
+  oy = H * 0.95 - (H * 0.90 - ch) / 2 + SB.minY * scale;
+}
+
+function sx(x){ return ox + x * scale; }
+function sy(y){ return oy - y * scale; }
+function SP(p){ return [sx(p[0]), sy(p[1])]; }
+function fromScreen(px, py){ return [(px - ox) / scale, (oy - py) / scale]; }
+
+/* ---------------- 绘图原语 ---------------- */
+function seg(a, b, color, width, dash){
+  var A = SP(a), B = SP(b);
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width || 1;
+  ctx.setLineDash(dash || []);
+  ctx.beginPath();
+  ctx.moveTo(A[0], A[1]);
+  ctx.lineTo(B[0], B[1]);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function head(A, B, color, size){
+  var ang = Math.atan2(B[1]-A[1], B[0]-A[0]);
+  var s = size || 8;
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(B[0], B[1]);
+  ctx.lineTo(B[0] - s*Math.cos(ang-0.38), B[1] - s*Math.sin(ang-0.38));
+  ctx.lineTo(B[0] - s*Math.cos(ang+0.38), B[1] - s*Math.sin(ang+0.38));
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function arrow(a, b, color, width){
+  seg(a, b, color, width || 2);
+  head(SP(a), SP(b), color, 9);
+}
+
+function dotAt(p, color, r){
+  var P = SP(p);
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(P[0], P[1], (r || 5) + 2.5, 0, Math.PI*2);
+  ctx.fillStyle = 'rgba(255,255,255,.95)';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(P[0], P[1], r || 5, 0, Math.PI*2);
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.restore();
+}
+
+function label(txt, p, color, size, dx, dy, align){
+  var P = SP(p);
+  ctx.save();
+  ctx.font = (size || 13) + 'px -apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif';
+  ctx.fillStyle = color;
+  ctx.textAlign = align || 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(txt, P[0] + (dx || 0), P[1] + (dy || 0));
+  ctx.restore();
+}
+
+function monoLabel(txt, p, color, size, dx, dy, align){
+  var P = SP(p);
+  ctx.save();
+  ctx.font = '500 ' + (size || 12) + 'px ui-monospace,Consolas,Menlo,monospace';
+  ctx.fillStyle = color;
+  ctx.textAlign = align || 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(txt, P[0] + (dx || 0), P[1] + (dy || 0));
+  ctx.restore();
+}
+
+function poly(pts, fill, stroke, dash){
+  if(!pts.length) return;
+  ctx.save();
+  ctx.beginPath();
+  var P = SP(pts[0]);
+  ctx.moveTo(P[0], P[1]);
+  for(var i = 1; i < pts.length; i++){
+    var q = SP(pts[i]);
+    ctx.lineTo(q[0], q[1]);
+  }
+  ctx.closePath();
+  if(fill){ ctx.fillStyle = fill; ctx.fill(); }
+  if(stroke){
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 1;
+    ctx.setLineDash(dash || []);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/* 双箭头标注（带两端箭头）；pos 控制标签落在段上的位置 */
+function dim(a, b, color, txt, pos){
+  seg(a, b, color, 1, [4, 3]);
+  var A = SP(a), B = SP(b);
+  head([A[0] + (B[0]-A[0])*0.2, A[1] + (B[1]-A[1])*0.2], A, color, 7);
+  head([B[0] + (A[0]-B[0])*0.2, B[1] + (A[1]-B[1])*0.2], B, color, 7);
+  if(txt){
+    var t = (pos === undefined) ? 0.5 : pos;
+    var m = [a[0] + (b[0]-a[0])*t, a[1] + (b[1]-a[1])*t];
+    var dx = 0, dy = -12;
+    if(Math.abs(B[0]-A[0]) < Math.abs(B[1]-A[1])){ dx = 10; dy = 0; }
+    monoLabel(txt, m, color, 11.5, dx, dy, 'left');
+  }
+}
+
+/* ---------------- 主绘制 ---------------- */
+function currentBasis(){
+  return basisFrom(S.theta, S.uLen, S.vLen);
+}
+
+function draw(dt){
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+
+  var B = currentBasis();
+  var u = B.u, v = B.v;
+  updateView(u, v, dt);
+  var D = dualBasis(u, v);
+  var p = add2(mul2(u, S.alpha), mul2(v, S.beta));
+  var t = S.t;
+
+  /* --- 网格：等 α 线平行于 v，等 β 线平行于 u --- */
+  if(S.showGrid){
+    for(var k = -3; k <= 4; k++){
+      var base = mul2(u, k);
+      seg(sub2(base, mul2(v, 2)), add2(base, mul2(v, 3.2)), '#e2e6ee', 1);
+    }
+    for(var k2 = -2; k2 <= 3; k2++){
+      var base2 = mul2(v, k2);
+      seg(sub2(base2, mul2(u, 2)), add2(base2, mul2(u, 3.2)), '#e2e6ee', 1);
+    }
+    /* 过 P 的两条格线高亮 */
+    var la = mul2(u, S.alpha), lb = mul2(v, S.beta);
+    seg(sub2(la, mul2(v, 0.25)), add2(la, mul2(v, 1.75)), 'rgba(194,65,12,.50)', 1.3, [6, 4]);
+    seg(sub2(lb, mul2(u, 0.25)), add2(lb, mul2(u, 1.75)), 'rgba(14,147,132,.35)', 1.3, [6, 4]);
+  }
+
+  /* --- 基平行四边形 --- */
+  poly([Q, u, add2(u, v), v], 'rgba(84,80,216,.055)', 'rgba(84,80,216,.28)', [5, 4]);
+
+  /* --- 场景叠加 --- */
+  if(S.scene === 1) drawDotTrap(u, v, p);
+  if(S.scene === 2 && D) drawRuler(u, v, p, D, t);
+  if(S.scene === 3) drawInvariant(u, v, p, t);
+
+  /* --- 分解虚线：P → Q+αu（沿 v），P → Q+βv（沿 u） --- */
+  var pa = mul2(u, S.alpha), pb = mul2(v, S.beta);
+  seg(p, pa, 'rgba(194,65,12,.55)', 1.2, [4, 4]);
+  seg(p, pb, 'rgba(14,147,132,.55)', 1.2, [4, 4]);
+
+  /* --- 基向量 --- */
+  arrow(Q, u, '#1d4ed8', 2.2);
+  arrow(Q, v, '#0e9384', 2.2);
+  monoLabel('u', mul2(u, 0.62), '#1d4ed8', 14, 6, -14);
+  monoLabel('v', mul2(v, 0.62), '#0e9384', 14, 10, -2);
+
+  /* --- 对偶基尺子 --- */
+  if(S.showDual && D){
+    arrow(Q, D.uStar, '#7c3aed', 2.4);
+    arrow(Q, D.vStar, '#7c3aed', 2.4);
+    monoLabel('u*', mul2(D.uStar, 1.06), '#7c3aed', 14, 6, 10);
+    monoLabel('v*', mul2(D.vStar, 1.06), '#7c3aed', 14, -22, -2);
+  }
+
+  /* --- P 点与格数标注 --- */
+  dotAt(p, '#c2410c', 5.5);
+  monoLabel('P', p, '#c2410c', 13, 10, -12);
+  if(S.scene === 0){
+    monoLabel('α=' + S.alpha.toFixed(2), mul2(u, S.alpha * 0.5), '#c2410c', 11.5, -8, 17);
+    monoLabel('β=' + S.beta.toFixed(2), mul2(v, S.beta * 0.5), '#0e9384', 11.5, 9, 0);
+  }
+
+  /* --- 原点 --- */
+  dotAt(Q, '#16191f', 3.2);
+  label('Q', Q, '#6b7280', 12, -14, 14);
+
+  updateReadout(u, v, p, D);
+}
+
+/* 场景 ②：直接点积 = 垂直投影，与真 α 有偏差 */
+function drawDotTrap(u, v, p){
+  var na = naiveAlpha(u, p);
+  var footN = mul2(u, na);      // 垂直投影落点
+  var footT = mul2(u, S.alpha); // 真 α 落点（从 P 沿 v 走）
+
+  seg(p, footN, '#be123c', 1.4, [5, 4]);
+
+  dotAt(footN, '#be123c', 4);
+  dotAt(footT, '#c2410c', 4);
+
+  /* 误差段：两条落点之间的长度差 */
+  if(Math.abs(na - S.alpha) > 0.01){
+    seg(footT, footN, '#be123c', 4);
+  }
+
+  monoLabel("α′=" + na.toFixed(2), footN, '#be123c', 12, -4, -15);
+  monoLabel('α=' + S.alpha.toFixed(2), footT, '#c2410c', 12, -6, 20);
+}
+
+/* 场景 ③：对偶基是一把尺子 —— 距离除以格厚 */
+function drawRuler(u, v, p, D, t){
+  var uStar = D.uStar;
+  var hU = heightOnBase(u, v);
+  var lv2 = dot2(v, v);
+
+  /* 把 α = 0 与 α = 1 两条线画出来，h_u 才有可量的两端 */
+  seg(sub2(Q, mul2(v, 0.35)), add2(Q, mul2(v, 1.55)), 'rgba(124,58,237,.55)', 1.3, [7, 5]);
+  seg(sub2(u, mul2(v, 0.35)), add2(u, mul2(v, 1.55)), 'rgba(124,58,237,.55)', 1.3, [7, 5]);
+
+  /* P 到 α = 0 线的垂足 */
+  var foot = mul2(v, dot2(p, v) / lv2);
+  seg(p, foot, '#7c3aed', 1.6, [5, 4]);
+  dotAt(foot, '#7c3aed', 3.5);
+
+  /* 直角符号 */
+  var Pp = SP(p), Fp = SP(foot);
+  var ax = Pp[0]-Fp[0], ay = Pp[1]-Fp[1];
+  var al = Math.hypot(ax, ay) || 1;
+  var ux = (Fp[0]-SP(Q)[0]), uy = (Fp[1]-SP(Q)[1]);
+  var ul = Math.hypot(ux, uy) || 1;
+  ux /= ul; uy /= ul;
+  var s1 = 9;
+  ctx.save();
+  ctx.strokeStyle = '#7c3aed';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(Fp[0] + ax/al*s1, Fp[1] + ay/al*s1);
+  ctx.lineTo(Fp[0] + ax/al*s1 + ux*s1, Fp[1] + ay/al*s1 + uy*s1);
+  ctx.lineTo(Fp[0] + ux*s1, Fp[1] + uy*s1);
+  ctx.stroke();
+  ctx.restore();
+
+  /* 一格厚 h_u：在 P 的垂足处，沿 u* 方向从 α = 0 线量到 α = 1 线 */
+  var nHat = mul2(uStar, 1 / len2(uStar));
+  var perpVec = mul2(nHat, hU);
+  var foot2 = add2(foot, perpVec);
+  dim(foot, foot2, '#7c3aed', 'h_u', 0.82);
+
+  /* 距离标注 */
+  var d = len2(sub2(p, foot));
+  monoLabel('d = ' + d.toFixed(2), mul2(add2(p, foot), 0.5), '#7c3aed', 11.5, 10, -9);
+  monoLabel('α = d / h_u = ' + (d / hU).toFixed(2), add2(p, [0.02, -0.34]), '#7c3aed', 11.5, 0, 0);
+}
+
+/* 场景 ④：α 不变 ⇒ 这一块面积不变，β 完全不参与 */
+function drawInvariant(u, v, p, t){
+  var base = areaOf(u, v);
+  var au = mul2(u, S.alpha);
+  var auv = add2(au, v);
+
+  /* 由 α·u 与 v 张成的平行四边形：面积恰为 α × 面积(u,v)，与 β 无关 */
+  poly([Q, au, auv, v], 'rgba(180,83,9,.13)', 'rgba(180,83,9,.65)', [5, 4]);
+
+  var cen = mul2(add2(add2(au, auv), v), 0.25);
+  monoLabel('面积 = ' + (S.alpha).toFixed(2) + ' × 底面积', cen, '#b45309', 12, 0, 0);
+
+  /* P 只在这条边上滑动 */
+  seg(au, auv, 'rgba(180,83,9,.55)', 2);
+  seg(p, mul2(u, S.alpha), 'rgba(180,83,9,.55)', 1.2, [4, 4]);
+
+  /* α 不变、β 在变 */
+  monoLabel('α = ' + S.alpha.toFixed(2) + '（不变）', mul2(u, S.alpha * 0.5), '#c2410c', 12, -14, 16);
+  monoLabel('β = ' + S.beta.toFixed(2) + '（在变）', mul2(v, S.beta * 0.5), '#0e9384', 12, -52, 2);
+
+  /* β 刻度 */
+  for(var k = 0; k <= 1; k += 0.25){
+    var q1 = add2(au, mul2(v, k));
+    dotAt(q1, 'rgba(180,83,9,.85)', 2.2);
+  }
+}
+
+/* ---------------- 读数 ---------------- */
+function updateReadout(u, v, p, D){
+  var na = naiveAlpha(u, p);
+  var hU = heightOnBase(u, v);
+  var us = D ? len2(D.uStar) : NaN;
+
+  document.getElementById('rA').textContent = S.alpha.toFixed(3);
+  document.getElementById('rB').textContent = S.beta.toFixed(3);
+  document.getElementById('rNaive').textContent = na.toFixed(3);
+  document.getElementById('rErr').textContent = (na - S.alpha).toFixed(3);
+  document.getElementById('rH').textContent = hU.toFixed(3);
+  document.getElementById('rUstar').textContent = us.toFixed(3);
+}
+
+/* ---------------- 动画 ---------------- */
+var last = 0;
+function frame(ts){
+  if(!last) last = ts;
+  var dt = Math.min(0.05, Math.max(0, (ts - last) / 1000));
+  last = ts;
+  S.t += dt;
+
+  /* 基参数平滑逼近 */
+  S.theta += (S.thetaT - S.theta) * Math.min(1, dt * 10);
+  S.uLen  += (S.uLenT  - S.uLen ) * Math.min(1, dt * 10);
+  S.vLen  += (S.vLenT  - S.vLen ) * Math.min(1, dt * 10);
+
+  if(!S.manual){
+    if(S.scene === 0){
+      S.alpha = 0.62 + 0.45 * Math.sin(S.t * 0.72);
+      S.beta  = 0.55 + 0.38 * Math.sin(S.t * 0.49 + 1.1);
+    } else if(S.scene === 3){
+      S.beta = 0.50 + 0.42 * Math.sin(S.t * 0.8);
+      S.alpha = 0.82;
+    }
+  }
+
+  draw(dt);
+  requestAnimationFrame(frame);
+}
+
+/* ---------------- 交互 ---------------- */
+function resize(){
+  var box = cv.parentElement.getBoundingClientRect();
+  W = Math.max(320, box.width);
+  H = Math.max(280, box.height);
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  cv.width = Math.round(W * DPR);
+  cv.height = Math.round(H * DPR);
+  draw(1);
+}
+
+function setScene(n){
+  if(!(n >= 0 && n <= 3)) return;
+  S.scene = n;
+  S.manual = false;
+  S.t = 0;
+  if(n === 1){ S.alpha = 0.78; S.beta = 0.62; }
+  if(n === 2){ S.alpha = 0.45; S.beta = 0.55; }
+  if(n === 3){ S.alpha = 0.82; S.beta = 0.72; }
+  var tabs = document.getElementById('tabs');
+  Array.prototype.forEach.call(tabs.children, function(x, i){
+    x.classList.toggle('on', i === n);
+  });
+  renderExplain();
+  draw(0.25);
+}
+
+function bindTabs(){
+  var tabs = document.getElementById('tabs');
+  tabs.addEventListener('click', function(e){
+    var b = e.target.closest('button');
+    if(!b) return;
+    setScene(parseInt(b.dataset.scene, 10));
+  });
+}
+
+function bindSlider(id, key, out, digits){
+  var el = document.getElementById(id);
+  var o = document.getElementById(out);
+  el.addEventListener('input', function(){
+    var val = parseFloat(el.value);
+    S[key + 'T'] = val;
+    o.textContent = digits ? val.toFixed(digits) : String(val);
+    /* 立即生效并重绘，不等 rAF —— 后台标签页 rAF 会暂停，否则数字变了箭头不动 */
+    if(key === 'theta') S.theta = val;
+    else if(key === 'uLen') S.uLen = val;
+    else if(key === 'vLen') S.vLen = val;
+    draw(0.1);
+  });
+}
+
+function bindChecks(){
+  function wire(id, prop){
+    document.getElementById(id).addEventListener('change', function(e){
+      S[prop] = e.target.checked;
+      draw(0.1);
+    });
+  }
+  wire('cGrid', 'showGrid');
+  wire('cDual', 'showDual');
+  wire('cProj', 'showProj');
+  wire('cArea', 'showArea');
+}
+
+function bindDrag(){
+  var dragging = false;
+  function pick(ev){
+    var r = cv.getBoundingClientRect();
+    var px = ev.clientX - r.left;
+    var py = ev.clientY - r.top;
+    var w = fromScreen(px, py);
+    /* 先把点夹在可视区内，再用对偶基反解坐标 —— 保证 P 不会被拖出画布 */
+    w[0] = Math.max(VB.minX + 0.06, Math.min(VB.maxX - 0.06, w[0]));
+    w[1] = Math.max(VB.minY + 0.06, Math.min(VB.maxY - 0.06, w[1]));
+    var B = currentBasis();
+    var c = planeCoords(B.u, B.v, w);
+    if(!c) return;
+    S.alpha = c.alpha;
+    S.beta  = c.beta;
+    draw(0);
+  }
+  cv.addEventListener('pointerdown', function(ev){
+    dragging = true;
+    S.manual = true;
+    cv.setPointerCapture(ev.pointerId);
+    pick(ev);
+  });
+  cv.addEventListener('pointermove', function(ev){ if(dragging) pick(ev); });
+  cv.addEventListener('pointerup', function(ev){
+    dragging = false;
+    try{ cv.releasePointerCapture(ev.pointerId); }catch(e){}
+  });
+  cv.addEventListener('pointercancel', function(){ dragging = false; });
+}
+
+var TEXT = [
+  {
+    h: '① α 是「沿 u 走了几格」',
+    p: '把过 Q 且平行于 v 的那些线编号为 α = 0、1、2……，那么 α 就是 P 所在那条线的编号。α = 1 恰好是从 Q 沿 u 走一整步落到的位置。注意它<b>不是距离</b>，也不是投影长度，而是一个无量纲的格数。',
+    q: 'P = Q + α·u + β·v　→　α、β 就是斜网格里的坐标，工程上就是 UV。'
+  },
+  {
+    h: '② 直接点积为什么错',
+    p: '把 P 垂直投影到 u 轴上，得到的系数 <code>(p·u)/(u·u)</code> 是<b>投影长度</b>，不是坐标。它多算了一块 —— 因为 β 那一份沿着斜着的 v 也会在 u 方向留下影子。多出来的量恰好是 <code>β·(u·v)/|u|²</code>，当 u⊥v 时这个交叉项为 0，错误自动消失，所以正交的情形看不出问题。',
+    q: 'α′ = (p·u)/(u·u) = α + β·(u·v)/|u|²　　错误随夹角偏离 90° 而增大。'
+  },
+  {
+    h: '③ 对偶基：一把只量一个方向的尺子',
+    p: '要数 α，需要一把「看不见 v」的尺子：它必须垂直于 v（这样 β 的贡献为 0），并且刻度归一化到「走一格读作 1」（这样读数直接就是格数）。满足这两条的向量就是 u<sup>*</sup>。图中两条紫色虚线是 α = 0 与 α = 1 两道格线（分别过 Q 与 u 的箭头端点）：P 到 α = 0 线的垂直距离是 d，两线之间的垂直距离（紫色双箭头）是格厚 h<sub>u</sub>，于是 <code>α = d / h<sub>u</sub></code>。',
+    q: 'u*·v = 0（看不见 v）　+　u*·u = 1（一格读作 1）　→　α = p·u*'
+  },
+  {
+    h: '④ 叉积为什么能抹掉 β',
+    p: 'P 沿 v 方向滑动时，β 在变，但 α 不变。图中橙色那块平行四边形由 α·u 与 v 张成，面积恰好是 α × 底面积，β 完全不参与。叉积 p×v 取的就是「p 与 v 张成的面积」，所以 <code>|p×v| = α·|u×v|</code> —— β 被结构性地消掉了。',
+    q: 'p × v = α(u × v) + β(v × v) = α·n　　因为 v × v = 0。'
+  }
+];
+
+function renderExplain(){
+  var d = TEXT[S.scene];
+  document.getElementById('explain').innerHTML =
+    '<h2>' + d.h + '</h2><p>' + d.p + '</p><div class="eq">' + d.q + '</div>';
+}
+
+function resetPlay(){
+  S.manual = false;
+  S.t = 0;
+  if(S.scene === 0){ S.alpha = 0.78; S.beta = 0.62; }
+  if(S.scene === 1){ S.alpha = 0.78; S.beta = 0.62; }
+  if(S.scene === 2){ S.alpha = 0.45; S.beta = 0.55; }
+  if(S.scene === 3){ S.alpha = 0.82; S.beta = 0.72; }
+  draw(0);
+}
+
+/* ---------------- 启动 ---------------- */
+bindTabs();
+bindSlider('sTh', 'theta', 'vTh', 0);
+bindSlider('sU', 'uLen', 'vU', 2);
+bindSlider('sV', 'vLen', 'vV', 2);
+bindChecks();
+bindDrag();
+document.getElementById('btnPlay').addEventListener('click', resetPlay);
+renderExplain();
+
+/* 支持 #0 ~ #3 直达某个场景 */
+try {
+  var hn = parseInt(String(window.location.hash || '').replace('#', ''), 10);
+  if(hn >= 0 && hn <= 3) setScene(hn);
+} catch(e) {}
+
+if(window.ResizeObserver){
+  new ResizeObserver(resize).observe(cv.parentElement);
+} else {
+  window.addEventListener('resize', resize);
+}
+
+/* 关键：先同步画一帧，再注册 rAF —— 离屏/后台时 rAF 会被暂停 */
+resize();
+draw(1);
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

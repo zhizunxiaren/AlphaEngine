@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>重要采样与多重重要性采样（MIS）</title>
+<style>
+:root{--bg:#fafaf7;--fg:#1d1d1b;--mut:#6b6b66;--card:#fff;--bd:#e3e2dc;--a:#2f6fed;--b:#e8710a;--c:#16a34a;--g:#9a9a94;--r:#dc2626;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#14140f;--fg:#ecebe4;--mut:#a3a29a;--card:#1d1d17;--bd:#34332b;--a:#6b9bff;--b:#ff9a45;--c:#4ade80;--g:#7a7a72;--r:#f87171}}
+:root[data-theme="dark"]{--bg:#14140f;--fg:#ecebe4;--mut:#a3a29a;--card:#1d1d17;--bd:#34332b;--a:#6b9bff;--b:#ff9a45;--c:#4ade80;--g:#7a7a72;--r:#f87171}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.78 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+main{max-width:780px;margin:0 auto;padding:28px 18px 70px}
+h1{font-size:1.85rem;line-height:1.32;margin:.4em 0 .2em}
+h2{font-size:1.28rem;margin:2.3em 0 .5em;padding-top:.62em;border-top:1px solid var(--bd)}
+h3{font-size:1.04rem;margin:1.6em 0 .35em}
+p{margin:.7em 0}
+.sub{color:var(--mut)}
+.f{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:10px 14px;margin:12px 0;font-family:Georgia,"Times New Roman",serif;font-size:1.04rem;overflow-x:auto;white-space:nowrap}
+.demo{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px;margin:16px 0}
+canvas{width:100%;display:block}
+.ctl{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;margin:8px 0 2px;font-size:.9rem}
+.ctl label{display:flex;align-items:center;gap:6px}
+input[type=range]{width:130px}
+button{font:inherit;font-size:.9rem;border:1px solid var(--bd);background:var(--bg);color:var(--fg);border-radius:8px;padding:4px 11px;cursor:pointer}
+button.on{background:var(--fg);color:var(--bg)}
+button.bad{border-color:var(--r);color:var(--r)}
+button.bad.on{background:var(--r);color:#fff}
+.stat{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:.88rem;margin-top:8px;color:var(--mut)}
+.stat b{color:var(--fg);font-variant-numeric:tabular-nums}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:1px}
+.note{color:var(--mut);font-size:.88rem}
+.tip{border-left:3px solid var(--c);padding:3px 13px;margin:15px 0;background:var(--card)}
+.warn{border-left:3px solid var(--r);padding:3px 13px;margin:15px 0;background:var(--card)}
+.tldr{border-left:3px solid var(--a);padding:2px 14px 6px;margin:16px 0;background:var(--card);border-radius:0 8px 8px 0}
+.tldr p{margin:.5em 0}
+.tldr b{color:var(--a)}
+table{border-collapse:collapse;width:100%;font-size:.88rem;margin:10px 0}
+th,td{border:1px solid var(--bd);padding:5px 8px;text-align:left;vertical-align:top}
+th{background:var(--bg);font-weight:600}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+code{font-family:ui-monospace,Consolas,monospace;font-size:.9em;background:var(--bg);border:1px solid var(--bd);border-radius:4px;padding:0 4px}
+pre{background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:10px 12px;overflow-x:auto;font-size:.84rem;line-height:1.6}
+pre code{background:none;border:0;padding:0}
+.em{background:linear-gradient(transparent 62%,rgba(47,111,237,.22) 0);padding:0 1px}
+#err{display:none;background:var(--r);color:#fff;padding:8px 14px;font-size:.85rem;font-family:ui-monospace,monospace;white-space:pre-wrap}
+</style></head><body>
+<div id="err"></div>
+<main>
+<h1>重要采样与多重重要性采样（MIS）</h1>
+<p class="sub">蒙特卡洛渲染降噪的两级手段：先把样本放到值得放的地方（重要采样），再在没有任何单一分布能覆盖被积函数时，把多个分布缝成一个（MIS）。下面的每个演示都在实时跑真实的采样。中文文献里这一对概念也常写作「重要采样 / 多重重要采样」，MIS 是同一个东西。</p>
+
+<div class="tldr">
+<p><b>一句话结论。</b>整套东西只有一个量：<span class="em">单样本贡献 f/p</span>。它越平稳，噪声越小。</p>
+<p>① <b>重要采样</b>：换 p。方差 = ∫f²/p − I²，所以最优 p ∝ |f|。不是「多采样」，是「换分布」。</p>
+<p>② <b>MIS</b>：f 有两个因子（材质 f<sub>r</sub>、光照 L<sub>i</sub>），策略 A 只看得见前一个，策略 B 只看得见后一个。MIS 用一组和为 1 的权重把两个无偏估计缝成一个，方差接近两者中较好的那个。</p>
+<p>③ <b>唯一真正困难的地方</b>：两个 p 必须在同一个测度上。面积光源上的 <code>1/A</code> 是「每平方米」，BSDF 的 pdf 是「每球面度」，中间差一个 <code>r²/cosθ</code>。这步错了不是「噪点多一点」，是<b>结果偏差</b>。</p>
+</div>
+
+<h2>1. 一个像素的亮度就是一个积分</h2>
+
+<h3>1.1 为什么是积分</h3>
+<p>着色点朝相机发出的光，来自它上方半球里的<b>每一个方向</b>：每个方向有一束光 L<sub>i</sub>，被材质按方向"打折"（f<sub>r</sub>）后加进来，还要按入射倾角加权（cosθ）。方向是连续的，有无穷多个，所以求和变成积分：</p>
+<div class="f">L<sub>o</sub> = ∫<sub>Ω</sub> f<sub>r</sub>(ω<sub>i</sub>,ω<sub>o</sub>) · L<sub>i</sub>(ω<sub>i</sub>) · cosθ<sub>i</sub> dω<sub>i</sub></div>
+<p>被积函数记作 f(ω) = f<sub>r</sub>·L<sub>i</sub>·cosθ。这个积分没有解析解——L<sub>i</sub> 本身还依赖别的物体反射来的光，也是积分。所以只能<b>抽样估计</b>。</p>
+<p>蒙特卡洛的做法只有一步：<b>按某个概率分布 p 随机挑一个方向 ω，追踪这条光线，把它的贡献记作 f/p，再对很多次取平均。</b></p>
+<div class="f">I = ∫ f(x) dx ≈ (1/N) Σ<sub>i</sub> f(x<sub>i</sub>) / p(x<sub>i</sub>)，　x<sub>i</sub> ~ p</div>
+
+<h3>1.2 为什么要除以 p</h3>
+<p>不是"补偿"这种模糊说法，它就是<b>换元</b>的定义。把积分从"对方向均匀地量"换成"按 p 的量法去量"，被积函数必须同时除以 p 的密度，否则总量会变：</p>
+<div class="f">∫ f(x) dx = ∫ [ f(x)/p(x) ] · p(x) dx = E<sub>x~p</sub>[ f/p ]</div>
+<p>这句话有两个直接后果，后面所有陷阱都从这里长出来：</p>
+<p>① <b>p 必须是你真正用来抽样的那个函数。</b>写代码时 p 出现在分母里，容易误以为它只是"一个权重"。它不是——它是"这个样本被抽到的概率"。分母写错 = 每个样本被乘了一个错误的系数 = 结果系统性偏移，而且样本越多越稳定地偏移，看起来"很干净但颜色不对"。<br>
+② <b>只要 f≠0 的地方 p&gt;0，估计就无偏。</b>p 在哪里为 0，哪里就永远抽不到样本，那块贡献直接消失，这是"漏光/漏高光"。反过来 p&gt;0 而 f=0 的地方无害，只是浪费样本。</p>
+
+<h3>1.3 噪声有多大：方差只由 f²/p 决定</h3>
+<p>方差衡量"单次估计围绕真值抖多厉害"：</p>
+<div class="f">Var[f/p] = E[(f/p)²] − I² = ∫ f²/p dx − I²</div>
+<p>注意被积的是 <b>f²/p</b>，不是 f。这解释了两件事：</p>
+<p>• <b>p 该大在 f² 大的地方</b>，也就是 f 大的地方——因为分子是平方，大值区域的双重惩罚更重。<br>
+• 对非负 f，令 p = f/∫f（即 p ∝ f），则 f/p ≡ ∫f 是常数，方差<b>恰好为 0</b>：每个样本都等于答案。这就是重要采样的理论天花板。</p>
+<p>严格地说，使 ∫f²/p 最小的 p 是 p = |f|/∫|f|，此时最小方差 = (∫|f|)² − (∫f)²。f 不变号时这个下界是 0，全黑。</p>
+<p><b>为什么不能靠堆样本？</b>总方差按 σ²/N 下降，<b>噪声按 1/√N 下降</b>。降噪 2 倍要 4 倍样本，4 倍要 16 倍。而把 p 选对，σ 可以从 10 掉到 0.1，等于 10000 倍样本的效果。这就是重要采样存在的全部理由——它改的是系数，不是数量。</p>
+
+<h2>2. 一维把道理讲透</h2>
+<p>先把渲染放一边，看一个 1 维积分，因为所有量都能画出来。下面的 f 有一个主峰（0.62 附近）和一个小凸起（0.25 附近）；p 只建模了主峰。</p>
+
+<p><b>怎么看演示 1。</b><br>
+① <b>上图</b>：灰虚线是 f，蓝线是 p，圆点是落下的样本，<b>点越大表示该样本的 f/p 越大</b>（这一枪对平均值的影响越大）。两条曲线各自缩放到满高，所以<b>只看形状，不是同一刻度</b>。<br>
+② <b>中图</b>：单样本贡献 f/p 随 x 的变化，虚线是 I。这条线<b>越平，方差越小</b>；某处冒出一个尖峰，那就是萤火虫。<br>
+③ <b>下图</b>：累计估计值。灰 = 均匀采样（p=1），蓝 = 你的 p。两者每步各用 1 个样本，公平比较。<br>
+④ <b>滑块</b>：「贴合度」决定 p 有多集中在主峰；「偏移」把 p 的峰故意挪开，模拟 p 选错了地方。</p>
+
+<div class="demo" id="demo1">
+<canvas id="c1" height="404"></canvas>
+<div class="ctl">
+<label>p 对主峰的贴合度 <input type="range" id="a1" min="0" max="0.95" step="0.05" value="0.8"></label>
+<label>p 峰位置偏移 <input type="range" id="o1" min="-0.3" max="0.3" step="0.02" value="0"></label>
+<button id="r1">重新开始</button></div>
+<div class="stat">
+<span><i class="dot" style="background:var(--g)"></i>均匀 标准差 <b id="s1u">-</b></span>
+<span><i class="dot" style="background:var(--a)"></i>重要 标准差 <b id="s1p">-</b></span>
+<span>均匀 最大单样本贡献 <b id="m1u">-</b></span>
+<span>重要 最大单样本贡献 <b id="m1p">-</b></span></div>
+</div>
+
+<div class="tip"><b>三个数值连起来看，会得到一个反直觉的结论。</b><br>
+把贴合度从 0 慢慢往上拉：主峰附近的 f/p 被压平，标准差往下掉（默认 0.8 大约是均匀采样的一半）。<b>继续拉到 0.95，它反而变差了</b>——因为 0.25 那个小凸起此时只剩 0.05 的底，f/p 在那里冲到 I 的二十几倍。看「最大单样本贡献」这一栏：它会从 1 左右跳到 5 左右；上图里对应位置的圆点会变成一颗大圆斑。<br>
+所以重要采样不是「p 越集中越好」，而是「<b>p 必须覆盖 f 所有不为零的地方</b>」。单峰的 p 永远做不到这件事——这不是参数没调好，是<b>一个分布装不下一个多峰函数</b>。这就是 §4 的起点。<br>
+再把偏移拉到 0.3：p 的峰和 f 的峰整个错开，蓝线比均匀采样还抖——采样了错的地方比不采样更糟。</div>
+
+<div class="note">上图两条曲线各自归一化到满高，只比较形状；中图的纵轴按 10×真值截断，被截断处在上边框画出红色短标记。</div>
+
+<h2>3. 回到渲染：f 有两个因子，两种策略各只看得见一个</h2>
+
+<h3>3.1 两种采样各自知道什么</h3>
+<p>f = f<sub>r</sub> · L<sub>i</sub> · cosθ。把它拆成两个来源：</p>
+<table>
+<tr><th>策略</th><th>它的 p</th><th>它"看得见"</th><th>它"看不见"</th></tr>
+<tr><td><b>BRDF 采样</b></td><td>p ∝ f<sub>r</sub>·cosθ</td><td>材质：光会被反射到哪些方向。漫反射 → 余弦分布；GGX → 采半程向量再反射</td><td>哪里有光。它只管"我愿不愿意反射"，不管"那边有没有灯"</td></tr>
+<tr><td><b>光源采样<br>(NEE)</b></td><td>p ∝ L<sub>e</sub></td><td>光照：灯在哪、多大、多亮</td><td>材质：它往灯上均匀撒点，不管"这个方向我反不反射得出去"</td></tr>
+</table>
+
+<h3>3.2 两个场景，各有一种策略是废的</h3>
+<p><b>场景一：粗糙表面 + 小而亮的灯。</b>取一个半径 0.1 m 的球形灯，离着色点 2 m。它张开的立体角约 π·0.1²/2² = <b>0.0079 sr</b>；整个半球是 2π = 6.28 sr。也就是说，随机撒方向<b>只有 0.13% 能打中灯</b>，大约八百个里才中一个。BRDF 采样在 6.28 sr 里均匀地乱撒，799 个样本贡献 0，第 800 个突然贡献巨大。平均值 = 一堆 0 加一个巨值，抖动极大。</p>
+<p>光源采样直接把样本全放在灯面上，每个样本都有光。<b>同一个场景，方差差几个数量级。</b></p>
+<p><b>场景二：光滑表面 + 大面积光源。</b>光源采样在灯面上均匀取点，但镜面 BRDF 只"接受"反射方向附近一个极窄的锥。大部分点被 f<sub>r</sub> 压成接近 0，样本全废在分母上。BRDF 采样把方向全塞进那个窄锥里，效果好。</p>
+<p>真实场景往往<b>两种情形同时存在</b>（一盏大面光 + 一盏小射灯，或者同一材质在不同粗糙度区域表现不同），没有任何单一策略能赢两次。</p>
+
+<h3>3.3 关键一步：把两个 p 放到同一个测度上</h3>
+<p>这是 MIS 落地时最容易错、也几乎总是被教程跳过的一步。</p>
+<p>BRDF 采样的 pdf 天然定义在<b>立体角</b>上，单位是 1/sr。光源采样如果是在灯面上均匀取点，pdf 定义在<b>面积</b>上，单位是 1/m²，值就是 1/A。这两个数<b>不能直接比较</b>，也不能直接放进同一个权重公式。</p>
+<p>换算靠立体角的定义 dω = dA·cosθ<sub>l</sub> / r²（θ<sub>l</sub> 是灯面法线与光线的夹角，r 是到采样点的距离）：</p>
+<div class="f">p<sub>ω</sub>(ω) = p<sub>A</sub>(y) · dA/dω = (1/A) · r² / cosθ<sub>l</sub></div>
+<p>自检：一块 0.25 m² 的灯，距离 2 m 正对着看，Ω = A·cosθ/r² = 0.0625 sr，均匀分布的 pdf 应该是 1/0.0625 = 16 /sr。用公式：(1/0.25)·(2²/1) = 4·4 = 16 ✓。</p>
+
+<p><b>怎么看演示 2。</b>拖动距离和尺寸，观察 p<sub>A</sub>、dA/dω、p<sub>ω</sub> 三个数怎么变。距离从 1 拉到 4，dA/dω 涨 16 倍——如果忘了这一步，你在权重里给光源策略的 pdf 就小了 16 倍，MIS 的份额分配完全错位。</p>
+
+<div class="demo" id="demo2">
+<canvas id="c3" height="270"></canvas>
+<div class="ctl">
+<label>到光源距离 d <input type="range" id="d3" min="1" max="4" step="0.1" value="2"></label>
+<label>光源边长 L <input type="range" id="l3" min="0.2" max="1.5" step="0.05" value="0.5"></label></div>
+<div class="stat">
+<span>A = L² = <b id="n3a">-</b> m²</span>
+<span>1/A = <b id="n3p">-</b> /m²</span>
+<span>dA/dω = d²/cosθ = <b id="n3j">-</b> m²/sr</span>
+<span>p<sub>ω</sub> = <b id="n3w">-</b> /sr</span>
+<span>近似占半球 <b id="n3f">-</b></span></div>
+</div>
+<div class="note">图中把光源当作距 d、正对视线的一小块，dA/dω = d²/cosθ 在该小块上取常值；真实实现里这一项要逐采样点计算。右侧百分比是 A·cosθ/d² ÷ 2π 的近似值，只用来建立"灯在方向空间里有多窄"的量感。</div>
+
+<div class="warn"><b>同类错误还有一处：环境贴图。</b>环境贴图的采样分布通常定义在 (θ,φ) 或 (u,v) 上，映射到方向时 dω = sinθ dθ dφ，所以 pdf 必须乘上 <code>sinθ</code>。漏掉它的典型症状不是噪点，而是<b>天顶/天底出现异常亮斑或暗带</b>——因为极点附近的 sinθ 趋近 0，权重被系统性放大。</div>
+
+<h2>4. 为什么不能把两种采样直接加起来</h2>
+<p>假设策略 A 的估计 Ã 和策略 B 的估计 B̃ 都是 I 的无偏估计。那把两者的样本都算进去，加起来不就"用了双倍信息"？</p>
+<p>不是。E[Ã + B̃] = I + I = <b>2I</b>。两张正确的照片叠在一起，不是更清楚的照片，是曝光翻倍。</p>
+<p>要加起来，就必须<b>在每一个方向上把份额切开</b>，使得任何位置 x 上两条路径分到的份额之和恰好是 1：</p>
+<div class="f">w<sub>A</sub>(x) + w<sub>B</sub>(x) = 1　⟹　E[Σ w<sub>i</sub>·f/p<sub>i</sub>] = ∫(w<sub>A</sub>+w<sub>B</sub>)·f dx = I</div>
+<p>这就是 MIS 的全部内容：<b>一个随 x 变化的划分（partition of unity）</b>。剩下的问题只有一个——这个 w 该怎么分。</p>
+
+<h2>5. 多重重要性采样（MIS）</h2>
+
+<h3>5.1 估计量</h3>
+<p>用 n<sub>i</sub> 个样本跑策略 i，x<sub>ij</sub> 是策略 i 的第 j 个样本：</p>
+<div class="f">F = Σ<sub>i</sub> (1/n<sub>i</sub>) Σ<sub>j</sub> w<sub>i</sub>(x<sub>ij</sub>) · f(x<sub>ij</sub>) / p<sub>i</sub>(x<sub>ij</sub>)，　Σ<sub>i</sub> w<sub>i</sub>(x) ≡ 1</div>
+
+<h3>5.2 无偏的两个前提</h3>
+<p>① <b>权重在每一点和为 1</b>，且 w<sub>i</sub> 只依赖 x、不依赖这个样本的取值（不能"看贡献大小再决定权重"，那就变成事后挑选，会引入偏差）。<br>
+② <b>p<sub>i</sub> 必须是策略 i 真实的采样密度</b>，且落在同一测度上。这一条比第一条更容易破，破了就是偏差，不是噪声。</p>
+
+<h3>5.3 平衡启发式：按"样本的来源概率"分账</h3>
+<p>把两个策略合成一个混合分布：p<sub>mix</sub>(x) = Σ n<sub>k</sub>p<sub>k</sub>(x) / Σn<sub>k</sub>。现在抽到一个位于 x 的样本，问它<b>是策略 A 产出的概率</b>——贝叶斯一步就得到：</p>
+<div class="f">P(A | x) = n<sub>A</sub>p<sub>A</sub>(x) / (n<sub>A</sub>p<sub>A</sub>(x) + n<sub>B</sub>p<sub>B</sub>(x))</div>
+<p>平衡启发式就是取 w<sub>A</sub> = P(A|x)。它做的事非常朴素：<b>样本在某个位置，"谁更可能生成它"，谁就拿走那里的权重。</b>于是——</p>
+<p>• 某个方向上策略 A 的 p 极小而 B 的 p 很大：这个样本几乎肯定是 B 生的，A 那点权重（比如 1.7%）就把 A 的稀有巨值 f/p<sub>A</sub> 压回去了。<br>
+• 反过来，B 在 A 的主场也是同样的下场。</p>
+<p>在演示 2 的场景里，宽峰中心 x=0.72 处 p<sub>A</sub> = 0.08、p<sub>B</sub> = 4.67，<b>w<sub>A</sub> ≈ 1.7%</b>；窄峰中心 x=0.25 处 p<sub>A</sub> = 12.32、p<sub>B</sub> = 0.08，<b>w<sub>A</sub> ≈ 99.3%</b>。A 在宽峰处偶尔抽到的那个 f/p<sub>A</sub> ≈ 10.25 的"萤火虫"，乘上 1.7% 只剩约 0.17，被压平了。</p>
+<p><b>注意这不是"整幅图选一种策略"</b>，而是每个样本、每个方向单独加权。这也是它比"手动调一个混合系数"强的地方：混合系数是全局的一个数，MIS 的权重是每个方向上的一个函数。</p>
+
+<h3>5.4 幂启发式</h3>
+<div class="f">w<sub>i</sub> = (n<sub>i</sub>p<sub>i</sub>)<sup>β</sup> / Σ<sub>k</sub> (n<sub>k</sub>p<sub>k</sub>)<sup>β</sup>，常用 β = 2</div>
+<p>β=1 就是平衡启发式。β 越大，分账越"尖"：p 稍小的策略被压得越狠。好处是萤火虫被压得更低，坏处是在两个策略都不可靠的区域更依赖单一策略。实践上 β=2 的方差通常比平衡启发式低，所以工业渲染器多用它；平衡启发式的好处是 Veach 给出了它相对最优组合的方差上界，行为可预测。</p>
+<p>多策略时，分母是<b>所有</b>策略之和（Σ<sub>k</sub> 遍历全部），不是两两配对——三个策略两两配对会出现权重和不为 1。</p>
+
+<h3>5.5 演示：三种权重 + 一个错误示范</h3>
+<p>f 有两个峰：窄峰 0.25（策略 A 的 p<sub>A</sub> 对准它）、宽峰 0.72（策略 B 的 p<sub>B</sub> 对准它）。</p>
+<p>① <b>上图</b>：灰 = f，蓝 = p<sub>A</sub>，橙 = p<sub>B</sub>（各自缩放）；圆点是两种策略的样本，<b>大小 = 加权之后</b>的贡献，所以被压住的萤火虫看起来很小。<br>
+② <b>中图</b>：权重曲线。蓝 = w<sub>A</sub>，橙 = 1 − w<sub>A</sub>。窄峰附近蓝接近 1，宽峰附近橙接近 1。<br>
+③ <b>下表</b>：最新一对样本的 p<sub>A</sub>、p<sub>B</sub>、w<sub>A</sub> 与贡献，把"为什么 w 是这个数"摊开给你看。<br>
+④ <b>下图</b>：累计估计。三种方法每轮都用 <b>2 个样本</b>，公平比较。<br>
+⑤ <b>按钮</b>：先看平衡启发式；切「简单平均 (½,½)」看大圆点为什么压不住；再切幂启发式；最后切「直接相加」——那条线会停在<b>真值的两倍</b>，永远不收敛。</p>
+
+<div class="demo" id="demo3">
+<canvas id="c2" height="404"></canvas>
+<div class="ctl">权重：
+<button data-h="avg">简单平均 (½,½)</button><button data-h="bal" class="on">平衡启发式</button><button data-h="pow">幂启发式 β=2</button><button data-h="raw" class="bad">直接相加（错）</button>
+<button id="r2">重新开始</button></div>
+<div class="stat">
+<span><i class="dot" style="background:var(--a)"></i>仅 A 标准差 <b id="s2a">-</b></span>
+<span><i class="dot" style="background:var(--b)"></i>仅 B 标准差 <b id="s2b">-</b></span>
+<span><i class="dot" style="background:var(--c)"></i>MIS 标准差 <b id="s2m">-</b></span>
+<span>MIS 均值 <b id="s2mean">-</b></span></div>
+<table id="tb2">
+<tr><th>样本</th><th class="n">x</th><th class="n">p<sub>A</sub>(x)</th><th class="n">p<sub>B</sub>(x)</th><th class="n">w<sub>A</sub></th><th class="n">w<sub>B</sub></th><th class="n">加权贡献</th></tr>
+<tr><td>策略 A 抽到的</td><td class="n" id="t-x1">-</td><td class="n" id="t-a1">-</td><td class="n" id="t-b1">-</td><td class="n" id="t-wa1">-</td><td class="n" id="t-wb1">-</td><td class="n" id="t-c1">-</td></tr>
+<tr><td>策略 B 抽到的</td><td class="n" id="t-x2">-</td><td class="n" id="t-a2">-</td><td class="n" id="t-b2">-</td><td class="n" id="t-wa2">-</td><td class="n" id="t-wb2">-</td><td class="n" id="t-c2">-</td></tr>
+</table>
+</div>
+
+<div class="tip"><b>三者的差别在哪。</b>「简单平均」也是无偏的（权重和为 1），但每个策略的烂样本都还带着一半权重，改善很小。「平衡/幂」让每个位置由更合适的策略主导，MIS 的标准差通常接近甚至低于 A、B 中较好的那个——也就是说，<b>你没付出额外的样本，就拿到了两者里更好的那个</b>。「直接相加」不是偏坏的估计，是<b>错的估计</b>：均值停在 2I，画面整体亮一倍。</div>
+
+<h2>6. 实战场：NEE + BRDF 的完整结构</h2>
+<p>这是路径追踪里 MIS 真正出现的地方。每个着色点做两件事，然后把两者加权合并：</p>
+<pre><code>// 策略 A：光源采样（Next Event Estimation）
+y      = sample_point_on_light()           // 灯面上均匀取点
+wi     = normalize(y - x)
+pA     = p_pick_light * (1/A) * r² / |cosθ_y|   // ← 面积 → 立体角，关键一行
+Li     = shadow_ray_blocked(x, y) ? 0 : Le(y)
+fA     = brdf(x, wi) * |cosθ_x| * Li
+wA     = pA / (pA + p_bsdf(wi))            // p_bsdf 在"同一个方向"上求值
+
+// 策略 B：BRDF 采样
+wi2    = sample_bsdf(x)
+pB     = p_bsdf(wi2)
+Li2    = trace(x, wi2)
+fB     = brdf(x, wi2) * |cosθ_x| * Li2
+pA2    = pdf_of_light_sampling(wi2)        // ← 需要反问：这个方向打得到灯吗？
+wB     = pB / (pB + pA2)
+
+contribution = wA * fA / pA + wB * fB / pB</code></pre>
+<p><b>三个容易漏的点，都在上面标了：</b></p>
+<p>① <b>p<sub>A</sub> 里的 r²/cosθ</b>：见 §3.3。漏了它，MIS 就不是无偏的了（不是"效果差一点"）。<br>
+② <b>w<sub>A</sub> 要算 p<sub>bsdf</sub>(wi)</b>：BRDF 的 pdf 是解析的，给定方向就能算，代价低。<b>必须算</b>，否则 w<sub>A</sub> 就退化成 1，等于两个估计直接相加。<br>
+③ <b>w<sub>B</sub> 要算 p<sub>A</sub>(wi2)</b>：BSDF 采出来的方向能不能打到灯，需要一次求交才知道。打不到 → p<sub>A</sub>=0 → w<sub>B</sub>=1，可以跳过。<b>这一步如果图省事跳过，等于 w<sub>B</sub> 恒为 1 —— 双倍亮度。</b></p>
+<p><b>多光源</b>：先按概率选一盏灯，p<sub>pick</sub> 必须进 pdf（按功率加权时 p<sub>pick</sub> = 功率占比）。漏了它，权重会偏向大功率灯。<br>
+<b>阴影</b>：被挡住时 L<sub>i</sub>=0，贡献为 0，但<b>权重照算</b>——因为权重只依赖 pdf，不依赖可见性。这是正确的，不要"优化"成可见性为 0 时把权重也让给另一个策略。</p>
+
+<h2>7. MIS 解决不了什么</h2>
+<table>
+<tr><th>情形</th><th>为什么不行</th><th>实际做法</th></tr>
+<tr><td><b>硬阴影边缘</b></td><td>可见性在方向上跳变，两个 p 都是光滑的，f 是阶跃的。MIS 只在两个分布之间分配份额，改不了 f 的不连续</td><td>提高 SPP；屏幕空间/时域降噪；软光源</td></tr>
+<tr><td><b>焦散（SDS 路径）</b></td><td>镜面-漫反射-镜面，两端都不可采样，中间那一跳两个策略都到不了</td><td>光子映射、双向路径追踪（BDPT）</td></tr>
+<tr><td><b>极窄高光 + 极小灯</b></td><td>两个 p 各自都对不准交集，份额怎么分都覆盖不全</td><td>加第三策略、解析近似、专门的球形灯采样</td></tr>
+<tr><td><b>降噪本身</b></td><td>MIS 降低的是方差，不是把它变 0</td><td>低差异序列（Sobol）、时域累积、降噪器</td></tr>
+</table>
+
+<h2>8. 六个常见错误</h2>
+<table>
+<tr><th>错误</th><th>症状</th><th>原因</th></tr>
+<tr><td>pdf 忘了测度换算</td><td>靠近灯的地方偏亮/偏暗，随距离变化；不是噪点</td><td>1/m² 和 1/sr 混用，分母差 r²/cosθ</td></tr>
+<tr><td>权重里漏了选灯概率</td><td>亮灯的贡献被高估，权重分布偏斜</td><td>p 必须包含采样的每一步概率</td></tr>
+<tr><td>只算 w<sub>A</sub>，不算 w<sub>B</sub> 的反向 pdf</td><td>MIS 退化成直接相加，整体亮约一倍</td><td>权重和必须逐点为 1，不是"看起来差不多"</td></tr>
+<tr><td>p=0 时直接除</td><td>NaN / 黑点 / 白点</td><td>p=0 的样本不可能出现；真实出现说明 pdf 与采样器不一致</td></tr>
+<tr><td>先归一化再乘 MIS 权重</td><td>偏暗</td><td>权重已经是划分，再乘一次就重复扣了</td></tr>
+<tr><td>把 MIS 当降噪器</td><td>阴影边缘、焦散依然噪</td><td>见 §7，MIS 只处理"两个都无偏但方差不同"</td></tr>
+</table>
+
+<h2>9. 公式速查</h2>
+<table>
+<tr><th>量</th><th>式子</th><th>含义</th></tr>
+<tr><td>估计量</td><td>(1/N)Σ f/p</td><td>除 p 是换元，不是补偿</td></tr>
+<tr><td>方差</td><td>∫f²/p − I²</td><td>平坦的 f/p ⇒ 小方差</td></tr>
+<tr><td>最优 p</td><td>p ∝ |f|</td><td>f 不变号时方差下界为 0</td></tr>
+<tr><td>噪声缩放</td><td>σ/√N</td><td>降噪 2 倍要 4 倍样本</td></tr>
+<tr><td>面积→立体角</td><td>p<sub>ω</sub> = p<sub>A</sub>·r²/cosθ<sub>l</sub></td><td>MIS 无偏的前提</td></tr>
+<tr><td>MIS 估计</td><td>Σ<sub>i</sub>(1/n<sub>i</sub>)Σ<sub>j</sub> w<sub>i</sub>f/p<sub>i</sub></td><td>Σw<sub>i</sub> ≡ 1</td></tr>
+<tr><td>平衡启发式</td><td>w<sub>i</sub> = n<sub>i</sub>p<sub>i</sub>/Σn<sub>k</sub>p<sub>k</sub></td><td>= 样本来自策略 i 的后验概率</td></tr>
+<tr><td>幂启发式</td><td>w<sub>i</sub> = (n<sub>i</sub>p<sub>i</sub>)<sup>β</sup>/Σ(n<sub>k</sub>p<sub>k</sub>)<sup>β</sup></td><td>β=2，压制更狠，实践常用</td></tr>
+</table>
+<p class="note">页内所有数字都由页面自己的 JS 实时算出，没有硬编码的"示例值"；标准差是单次估计的样本标准差。</p>
+</main>
+<script>
+'use strict';
+const $=s=>document.querySelector(s);
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+window.addEventListener('error',e=>{const d=$('#err');d.style.display='block';d.textContent='脚本异常（第 '+e.lineno+' 行）：'+e.message});
+
+/* __MATH_BEGIN__ 以下为纯数学，由 _verify.js 抽取后独立校验 */
+const SQ2PI=2.5066282746310002;
+const Nm=(x,m,s)=>Math.exp(-.5*((x-m)/s)**2)/(s*SQ2PI);
+const f1=x=>.05+Math.exp(-.5*((x-.62)/.05)**2)+.2*Math.exp(-.5*((x-.25)/.05)**2);
+const f2=x=>.02+1.2*Math.exp(-.5*((x-.25)/.025)**2)+.8*Math.exp(-.5*((x-.72)/.07)**2);
+/* p1 必须严格归一化：截断高斯的质量要除掉，否则 p 积分不为 1，演示就带偏差 */
+const mass=(m,s)=>{let t=0;const n=4000;for(let i=0;i<n;i++)t+=Nm((i+.5)/n,m,s);return t/n};
+const M1=(a,o)=>mass(.62+o,.06);
+let Z1=M1(.8,0);
+const p1=(x,a,o,z)=>(1-a)+a*Nm(x,.62+o,.06)/(z||M1(a,o));
+const ZA=mass(.25,.03),ZB=mass(.72,.08);
+const pA=x=>.92*Nm(x,.25,.03)/ZA+.08;
+const pB=x=>.92*Nm(x,.72,.08)/ZB+.08;
+const wBal=x=>{const a=pA(x),b=pB(x);return a/(a+b)};
+const wAvg=()=>.5;
+const wPow=x=>{const a=pA(x),b=pB(x);return a*a/(a*a+b*b)};
+const integ=(f,n)=>{const N=n||40000;let s=0;for(let i=0;i<N;i++)s+=f((i+.5)/N);return s/N};
+const T1=integ(f1),T2=integ(f2);
+const rn=rnd=>{let u=0;while(!u)u=rnd();return Math.sqrt(-2*Math.log(u))*Math.cos(6.283185307179586*rnd())};
+const samp1=(a,o,rnd)=>{if(rnd()<a){let x;do{x=.62+o+.06*rn(rnd)}while(x<0||x>1);return x}return rnd()};
+const gs=(m,s,rnd)=>{if(rnd()<.92){let x;do{x=m+s*rn(rnd)}while(x<0||x>1);return x}return rnd()};
+const sampA=rnd=>gs(.25,.03,rnd);
+const sampB=rnd=>gs(.72,.08,rnd);
+/* 光源面积 → 立体角 */
+const solidPdf=(A,d,cosL)=>A>0&&cosL>0?(1/A)*d*d/cosL:0;
+/* __MATH_END__ */
+
+/* ---------- 通用绘图 ---------- */
+function setup(c,h){
+  const r=Math.min(window.devicePixelRatio||1,2),w=Math.max(c.clientWidth,240);
+  c.width=Math.round(w*r);c.height=Math.round(h*r);c.style.height=h+'px';
+  const g=c.getContext('2d');
+  if(!g)return null;
+  g.setTransform(r,0,0,r,0,0);
+  g.font='12px system-ui,-apple-system,"PingFang SC",sans-serif';
+  g.textBaseline='alphabetic';
+  return {g,w,h,T:{fg:css('--fg'),m:css('--mut'),bd:css('--bd'),a:css('--a'),b:css('--b'),c:css('--c'),g:css('--g'),r:css('--r')}};
+}
+/* 曲线：mx 为该曲线自身的纵轴满量程，val/mx 截断到 1 */
+function curve(g,fn,X,Y,W,H,mx,col,fill){
+  g.beginPath();
+  for(let i=0;i<=W;i+=1){const y=Y+H-Math.min(fn(i/W)/mx,1)*H;i?g.lineTo(X+i,y):g.moveTo(X+i,y)}
+  if(fill){g.lineTo(X+W,Y+H);g.lineTo(X,Y+H);g.closePath();g.fillStyle=fill;g.fill()}
+  else{g.strokeStyle=col;g.lineWidth=2;g.stroke()}
+}
+/* 收敛图：纵向按 my 映射，真值画虚线 */
+function conv(g,T,X,Y,W,H,truth,ser,cap){
+  g.strokeStyle=T.bd;g.lineWidth=1;g.strokeRect(X,Y,W,H);
+  const my=Math.max(truth*3,1e-9),ty=Y+H-truth/my*H;
+  g.setLineDash([5,4]);g.strokeStyle=T.fg;g.lineWidth=1;
+  g.beginPath();g.moveTo(X,ty);g.lineTo(X+W,ty);g.stroke();g.setLineDash([]);
+  g.fillStyle=T.m;g.fillText('真值 I',X+W-58,Y+13);g.fillText('样本数 →',X+W-52,Y+H-4);
+  for(const s of ser){
+    if(s.h.length<2)continue;
+    g.beginPath();s.h.forEach((v,i)=>{const x=X+(i+1)/cap*W,y=Y+H-Math.max(0,Math.min(v/my,1))*H;i?g.lineTo(x,y):g.moveTo(x,y)});
+    g.strokeStyle=s.col;g.lineWidth=1.8;g.stroke();
+  }
+}
+function dots(g,ds,X,Y,W,H,ref,colAt){
+  ds.forEach((d,i)=>{
+    d.t++;const k=Math.min(d.t/24,1),y=Y+(H-8)*k*k;
+    const r=2+Math.min(Math.sqrt(Math.abs(d.w)/ref)*3.2,10);
+    g.globalAlpha=.22+.7*(i/Math.max(ds.length,1));
+    g.fillStyle=colAt(d);g.beginPath();g.arc(X+d.x*W,y,r,0,6.2832);g.fill();
+  });
+  g.globalAlpha=1;
+}
+const sd=s=>s.n>1?Math.sqrt(Math.max(0,s.q/s.n-(s.s/s.n)**2)):0;
+const add=(s,e)=>{s.n++;s.s+=e;s.q+=e*e};
+const fx=v=>Number.isFinite(v)?v.toFixed(2):'-';
+
+/* ---------- 演示 1：重要采样 ---------- */
+let a1=.8,o1=0,S1;
+function reset1(){Z1=M1(a1,o1);S1={n:0,u:{n:0,s:0,q:0},p:{n:0,s:0,q:0},hu:[],hp:[],mxu:0,mxp:0,d:[]}}
+function step1(){
+  for(let k=0;k<2&&S1.n<400;k++){
+    const eu=f1(Math.random());
+    const x=samp1(a1,o1,Math.random);
+    const ep=f1(x)/p1(x,a1,o1,Z1);
+    S1.n++;add(S1.u,eu);add(S1.p,ep);
+    S1.mxu=Math.max(S1.mxu,eu);S1.mxp=Math.max(S1.mxp,ep);
+    S1.hu.push(S1.u.s/S1.n);S1.hp.push(S1.p.s/S1.n);
+    S1.d.push({x:x,w:ep,t:0});
+    if(S1.d.length>42)S1.d.shift();
+  }
+}
+function draw1(){
+  const o=setup($('#c1'),404);if(!o)return;
+  const {g,w,T}=o,X=12,W=Math.max(w-24,120);
+  const fmx=Math.max(...Array.from({length:120},(_,i)=>f1(i/120)))*1.08;
+  const pmx=Math.max(...Array.from({length:120},(_,i)=>p1(i/120,a1,o1,Z1)))*1.08;
+
+  g.fillStyle=T.m;g.fillText('① f（灰虚线）与 p（蓝）的形状；点越大 = 该样本 f/p 越大',X,15);
+  const AY=26,AH=120;
+  g.strokeStyle=T.bd;g.lineWidth=1;g.strokeRect(X,AY,W,AH);
+  curve(g,x=>p1(x,a1,o1,Z1),X,AY,W,AH,pmx,T.a,0);
+  g.setLineDash([6,5]);curve(g,f1,X,AY,W,AH,fmx,T.g,0);g.setLineDash([]);
+  dots(g,S1.d,X,AY,W,AH,T1,()=>T.a);
+
+  const BY=AY+AH+30,BH=58;
+  g.fillStyle=T.m;g.fillText('② 单样本贡献 f/p（虚线 = I；越平越安静）—— 红顶 = 超出 10×真值被裁掉',X,BY-8);
+  g.strokeStyle=T.bd;g.strokeRect(X,BY,W,BH);
+  const my=10*T1;
+  curve(g,x=>f1(x)/p1(x,a1,o1,Z1),X,BY,W,BH,my,T.r,0);
+  g.strokeStyle=T.fg;g.setLineDash([5,4]);g.lineWidth=1;
+  const iy=BY+BH-T1/my*BH;
+  g.beginPath();g.moveTo(X,iy);g.lineTo(X+W,iy);g.stroke();g.setLineDash([]);
+  g.fillStyle=T.r;
+  for(let i=0;i<W;i+=4){
+    if(f1(i/W)/p1(i/W,a1,o1,Z1)>my){g.fillRect(X+i,BY,3,3)}
+  }
+
+  const CY=BY+BH+30;
+  g.fillStyle=T.m;g.fillText('③ 累计估计（每方法每步 1 个样本）',X,CY-8);
+  conv(g,T,X,CY,W,404-CY-14,T1,[{h:S1.hu,col:T.g},{h:S1.hp,col:T.a}],400);
+
+  $('#s1u').textContent=fx(sd(S1.u));
+  $('#s1p').textContent=fx(sd(S1.p));
+  $('#m1u').textContent=fx(S1.mxu);
+  $('#m1p').textContent=fx(S1.mxp);
+}
+$('#a1').addEventListener('input',e=>{a1=+e.target.value;reset1()});
+$('#o1').addEventListener('input',e=>{o1=+e.target.value;reset1()});
+$('#r1').addEventListener('click',reset1);
+reset1();
+
+/* ---------- 演示 2：MIS ---------- */
+let H2='bal',S2;
+const wAof=x=>H2==='raw'?1:H2==='avg'?.5:H2==='bal'?wBal(x):wPow(x);
+const wBof=x=>H2==='raw'?1:1-wAof(x);
+function reset2(){const m=()=>({n:0,s:0,q:0});S2={n:0,A:m(),B:m(),M:m(),hA:[],hB:[],hM:[],d:[],last:null}}
+function step2(){
+  for(let k=0;k<2&&S2.n<400;k++){
+    const x1=sampA(Math.random),y1=sampB(Math.random);
+    const eA=f2(x1)/pA(x1);
+    const eB=f2(y1)/pB(y1);
+    const ca=wAof(x1)*eA, cb=wBof(y1)*eB;
+    const eM=ca+cb;
+    S2.n++;add(S2.A,eA);add(S2.B,eB);add(S2.M,eM);
+    S2.hA.push(S2.A.s/S2.n);S2.hB.push(S2.B.s/S2.n);S2.hM.push(S2.M.s/S2.n);
+    S2.d.push({x:x1,w:ca,t:0,c:0},{x:y1,w:cb,t:0,c:1});
+    if(S2.d.length>44)S2.d.splice(0,2);
+    S2.last={x1:x1,y1:y1,ca:ca,cb:cb};
+  }
+}
+function draw2(){
+  const o=setup($('#c2'),404);if(!o)return;
+  const {g,w,T}=o,X=12,W=Math.max(w-24,120);
+  const fmx=Math.max(...Array.from({length:200},(_,i)=>f2(i/200)))*1.1;
+  const amx=Math.max(...Array.from({length:200},(_,i)=>pA(i/200)))*1.05;
+  const bmx=Math.max(...Array.from({length:200},(_,i)=>pB(i/200)))*1.05;
+
+  g.fillStyle=T.m;g.fillText('① f（灰）、pA（蓝）、pB（橙）各自缩放；点大 = 加权后贡献大',X,15);
+  const AY=26,AH=104;
+  g.strokeStyle=T.bd;g.strokeRect(X,AY,W,AH);
+  curve(g,f2,X,AY,W,AH,fmx,0,T.g+'22');
+  curve(g,f2,X,AY,W,AH,fmx,T.g,0);
+  curve(g,pA,X,AY,W,AH,amx,T.a,0);
+  curve(g,pB,X,AY,W,AH,bmx,T.b,0);
+  dots(g,S2.d,X,AY,W,AH,T2*.55,d=>d.c?T.b:T.a);
+
+  /* 权重面板：纵轴固定 0~2.2，所以「两条权重相加」这条线在 1 还是在 2 一眼可辨 */
+  const BY=AY+AH+30,BH=64,WMAX=2.2;
+  g.fillStyle=T.m;g.fillText('② 蓝 = wA，橙 = wB，绿虚线 = 两者之和（必须恒为 1）',X,BY-8);
+  g.strokeStyle=T.bd;g.strokeRect(X,BY,W,BH);
+  g.strokeStyle=T.bd;g.setLineDash([2,4]);g.lineWidth=1;
+  const y1=BY+BH-1/WMAX*BH;
+  g.beginPath();g.moveTo(X,y1);g.lineTo(X+W,y1);g.stroke();g.setLineDash([]);
+  g.fillStyle=T.m;g.fillText('1',X+W-9,y1-4);
+  curve(g,wAof,X,BY,W,BH,WMAX,T.a,0);
+  curve(g,wBof,X,BY,W,BH,WMAX,T.b,0);
+  g.setLineDash([6,4]);curve(g,x=>wAof(x)+wBof(x),X,BY,W,BH,WMAX,T.c,0);g.setLineDash([]);
+
+  const CY=BY+BH+30;
+  g.fillStyle=T.m;g.fillText('③ 累计估计（每轮 2 个样本）',X,CY-8);
+  conv(g,T,X,CY,W,404-CY-14,T2,[{h:S2.hA,col:T.a},{h:S2.hB,col:T.b},{h:S2.hM,col:T.c}],400);
+
+  $('#s2a').textContent=fx(sd(S2.A));
+  $('#s2b').textContent=fx(sd(S2.B));
+  $('#s2m').textContent=fx(sd(S2.M));
+  $('#s2mean').textContent=S2.M.n?fx(S2.M.s/S2.M.n):'-';
+  const L=S2.last;
+  if(L){
+    const put=(id,v)=>{const e=$(id);if(e)e.textContent=v};
+    put('#t-x1',L.x1.toFixed(3));put('#t-a1',pA(L.x1).toFixed(3));put('#t-b1',pB(L.x1).toFixed(3));
+    put('#t-wa1',(wAof(L.x1)*100).toFixed(1)+'%');put('#t-wb1',(wBof(L.x1)*100).toFixed(1)+'%');
+    put('#t-c1',L.ca.toFixed(3));
+    put('#t-x2',L.y1.toFixed(3));put('#t-a2',pA(L.y1).toFixed(3));put('#t-b2',pB(L.y1).toFixed(3));
+    put('#t-wa2',(wAof(L.y1)*100).toFixed(1)+'%');put('#t-wb2',(wBof(L.y1)*100).toFixed(1)+'%');
+    put('#t-c2',L.cb.toFixed(3));
+  }
+}
+document.querySelectorAll('[data-h]').forEach(b=>b.addEventListener('click',()=>{
+  H2=b.dataset.h;
+  document.querySelectorAll('[data-h]').forEach(x=>x.classList.toggle('on',x===b));
+  reset2();
+}));
+$('#r2').addEventListener('click',reset2);
+reset2();
+
+/* ---------- 演示 3：面积 → 立体角 ---------- */
+let d3=2,l3=.5;
+function draw3(){
+  const o=setup($('#c3'),270);if(!o)return;
+  const {g,w,T}=o;
+  const cx=w*.42,cy=214,R=Math.min(w*.34,150);
+  const th=Math.atan((l3/2)/d3);
+  if(!(R>20))return;
+
+  g.fillStyle=T.m;g.fillText('侧视：光源在方向空间里张开的角度（外圈 = 整个半球 2π sr）',12,16);
+  g.strokeStyle=T.bd;g.lineWidth=1;g.beginPath();g.arc(cx,cy,R,Math.PI,0);g.stroke();
+  g.beginPath();g.moveTo(cx,cy);g.arc(cx,cy,R,-Math.PI/2-th,-Math.PI/2+th);g.closePath();
+  g.fillStyle=T.b+'38';g.fill();
+  g.strokeStyle=T.b;g.lineWidth=1.5;
+  /* 两条边界射线：canvas 里角度 0 = +x、+π/2 = +y（向下），所以"向上"是 -π/2。
+     端点一律用 (cx + R·cos a, cy + R·sin a)，与上面的 arc 保持同一套约定。 */
+  g.beginPath();g.moveTo(cx,cy);g.lineTo(cx+R*Math.cos(-Math.PI/2-th),cy+R*Math.sin(-Math.PI/2-th));g.stroke();
+  g.beginPath();g.moveTo(cx,cy);g.lineTo(cx+R*Math.cos(-Math.PI/2+th),cy+R*Math.sin(-Math.PI/2+th));g.stroke();
+  /* 光源本体：粗弧段 */
+  g.lineWidth=9;g.lineCap='round';
+  g.beginPath();g.arc(cx,cy,R-3,-Math.PI/2-th,-Math.PI/2+th);g.stroke();
+  /* θ 角标 */
+  const ar=R*0.26;
+  g.lineWidth=1.5;
+  g.beginPath();g.arc(cx,cy,ar,-Math.PI/2-th,-Math.PI/2);g.stroke();
+  g.fillStyle=T.b;g.fillText('θ = '+(th*180/Math.PI).toFixed(1)+'°',cx+ar*0.35,cy-ar-6);
+  /* 着色点 */
+  g.fillStyle=T.fg;g.beginPath();g.arc(cx,cy,3,0,6.2832);g.fill();
+  g.fillStyle=T.m;g.fillText('着色点',cx-18,cy+18);
+  g.fillStyle=T.b;g.fillText('光源',cx+2,cy-R-8);
+  g.fillStyle=T.m;g.fillText('θ 越小、距离越远，随机撒方向打中它的概率越低',12,262);
+}
+$('#d3').addEventListener('input',e=>{d3=+e.target.value;draw3();upd3()});
+$('#l3').addEventListener('input',e=>{l3=+e.target.value;draw3();upd3()});
+function upd3(){
+  const A=l3*l3, pAr=1/A, jac=d3*d3, pSol=solidPdf(A,d3,1), omega=A/d3/d3;
+  $('#n3a').textContent=A.toFixed(3);
+  $('#n3p').textContent=pAr.toFixed(2);
+  $('#n3j').textContent=jac.toFixed(2);
+  $('#n3w').textContent=pSol.toFixed(2);
+  $('#n3f').textContent=(omega/(2*Math.PI)*100).toFixed(2)+'%';
+}
+
+/* ---------- 主循环：先同步画一帧，再注册 rAF ---------- */
+function tick(){step1();step2();draw1();draw2();draw3();}
+upd3();
+tick();                                    /* 同步首帧：不依赖 rAF（离屏或后台标签页会暂停 rAF） */
+let running=true;
+function loop(){if(!running)return;tick();requestAnimationFrame(loop)}
+requestAnimationFrame(loop);
+window.addEventListener('resize',()=>{draw1();draw2();draw3()});
+</script>
+</body></html>

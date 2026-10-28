@@ -10,7 +10,7 @@ parent: "[[00-Home]]"
 related:
   - "[[20-Knowledge/00-Knowledge-MOC]]"
   - "[[90-System/LLM-Wiki-Obsidian]]"
-updated: 2026-09-15
+updated: 2026-10-28
 tags:
   - moc
   - sources
@@ -35,10 +35,11 @@ tags:
 
 - [[30-Sources/stb-图像解码库|stb_image 图像解码库]]（单头文件图像解码库 v2.30；引入约定见 [[20-Knowledge/Tooling/第三方依赖引入]]）
 
-## 图形与渲染技术（待采集）
+## 图形与渲染技术
 
-> [!note] 空状态
-> 首个渲染技术栈方向确认后，相关官方文档、论文与规范在此建卡登记（如 D3D12 / Vulkan 资源绑定、Shader、渲染管线等）。
+- [[30-Sources/图形学基础-教学参考|图形学基础教学参考]] —— PBRT、Microsoft、RTIOW 系列（含 *The Next Week* 的 `quad` 一节）与 W3C 一手参考，服务基础教程，不构成引擎技术栈选择。
+
+首个渲染技术栈方向确认后，再按相应问题域采集 API、资源绑定与 Shader 等来源。
 
 ## 采集规则
 
