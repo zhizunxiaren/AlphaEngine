@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="给初学者的图形学基础：用交互实验、分步流程和自测，把概念连成一幅画。现代图形学列为后续 TODO。">
+  <title>图形学，慢慢看。 · AlphaEngine 基础手册</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath d='M20 5L36 33H4Z' fill='%23235cdc'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+  <script defer src="math.js"></script>
+  <script defer src="content.js"></script>
+  <script defer src="pipeline-math.js"></script>
+  <script defer src="pipeline.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">跳到内容</a>
+  <header class="topbar">
+    <a class="brand" href="#overview" aria-label="回到图形学基础首页"><span class="triangle" aria-hidden="true"></span><span>图形学，慢慢看。</span></a>
+    <nav class="modes" aria-label="手册功能">
+      <button data-view="learn" aria-pressed="true">学习</button>
+      <button data-view="reference" aria-pressed="false">速查</button>
+      <button data-view="review" aria-pressed="false">复习</button>
+      <button data-view="todo" aria-pressed="false">现代图形学 <span class="small-tag">TODO</span></button>
+    </nav>
+    <span class="edition">AlphaEngine / 基础篇</span>
+  </header>
+  <div class="shell">
+    <aside class="sidebar" aria-label="章节目录">
+      <div class="side-title">一张图片的诞生</div>
+      <label class="search-label" for="search">查概念 / English term</label>
+      <input id="search" type="search" placeholder="试试：法线、UV、深度…" autocomplete="off">
+      <nav id="chapters" aria-label="基础章节"></nav>
+      <p id="search-status" role="status"></p>
+      <div class="side-bottom"><span id="progress">0 / 12 章已读</span><div class="progress-track"><div id="progress-bar"></div></div><p>先看变化，再记名字。<br>随时回来，不用一次读完。</p></div>
+    </aside>
+    <main id="main" tabindex="-1"></main>
+  </div>
+  <noscript><p class="noscript">请启用 JavaScript 以查看交互实验。概念原文也可在同目录 content.js 中阅读。</p></noscript>
+</body>
+</html>
